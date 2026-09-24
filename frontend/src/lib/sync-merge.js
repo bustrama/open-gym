@@ -31,6 +31,18 @@ const list = v => (Array.isArray(v) ? v : [])
 export const newerOf = (a, b) => ((b?._ts || 0) > (a?._ts || 0) ? b : a)
 
 /**
+ * Whether two copies differ in anything that syncs: everything but the workout in progress
+ * (`active`, which never leaves its device — PUT /api/data strips it) and the two stamps. A
+ * change to `active` alone is not a change to the account, so it must neither re-date the copy
+ * nor push it: re-dated, this copy wins every `_ts` rule in mergeStates over whatever another
+ * device (or the MCP server) wrote a moment earlier, and a set tap mid-workout silently undoes it.
+ */
+export function syncedChanged(a, b) {
+  const synced = s => { const { active, _ts, _rev, ...rest } = s || {}; return rest }
+  return JSON.stringify(synced(a)) !== JSON.stringify(synced(b))
+}
+
+/**
  * Entries of `newer` in their order, then those of `older` whose key nothing in `newer` has.
  * Same key → `newer`'s entry. Duplicate keys within one list are dropped (first wins).
  */

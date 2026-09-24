@@ -1,0 +1,85 @@
+# Opt-in: the MCP server over HTTP, for an LLM client on another machine. The stdio server in
+# mcp/ is spawned by a client on this box and needs none of this — see mcp/README.md.
+#
+# Read-only unless OPENGYM_MCP_WRITE is set, and it refuses to start without OPENGYM_MCP_TOKEN.
+# It is reached at /mcp on the app's own origin (https://gym.example.com/mcp), through the web
+# container, so a tunnel that maps one hostname to one port needs no extra route. Put an auth
+# proxy in front of that path as well (Cloudflare Access + a service token, mcp/README.md).
+#
+#   1. Install its two dependencies once — Node on the host, or a throwaway container:
+#        docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD/mcp:/app" -w /app node:22-alpine npm ci --omit=dev
+#   2. In .env:
+#        OPENGYM_MCP_TOKEN=<a long random secret: openssl rand -hex 32>
+#        OPENGYM_UID=<the profile it answers for: its id under "users" in data/db.json>
+#        COMPOSE_FILE=docker-compose.yml:docker-compose.mcp.yml    # so plain `docker compose` includes it
+#      and, to let it change the profile as well as read it:
+#        OPENGYM_MCP_WRITE=1
+#        OPENGYM_MCP_API_TOKEN=<another secret, NOT the one above: openssl rand -hex 32>
+#        OPENGYM_TZ=Europe/Lisbon          # the athlete's zone, for "today"
+#      plus a folder for the undo history, owned by the uid it runs as:
+#        mkdir -p mcp-journal && sudo chown 1000:1000 mcp-journal
+#   3. docker compose up -d
+services:
+  mcp:
+    image: node:22-alpine
+    working_dir: /app/mcp
+    command: ["node", "src/http.js"]
+    # The image's unprivileged `node` user. It reads the state files the api writes (0644) and
+    # not the 0600 ones — db.json, secret, vapid.json — which it has no use for.
+    user: "1000:1000"
+    # Nothing in it writes but the undo history, so nothing else may: no writable root filesystem,
+    # no capabilities, no privilege escalation. Changes to the profile go through the api.
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    environment:
+      - OPENGYM_DATA=/app/data
+      # The one profile it answers for. Required: a remote client is never served whichever state
+      # file happens to exist, and never told the ids of the others.
+      - OPENGYM_UID=${OPENGYM_UID:?set OPENGYM_UID in .env - the profile id under "users" in data/db.json}
+      - OPENGYM_MCP_TOKEN=${OPENGYM_MCP_TOKEN:?set OPENGYM_MCP_TOKEN in .env}
+      - OPENGYM_MCP_PORT=8765
+      # Writes: off unless set. The api checks the same flag, API token and uid on its side.
+      - OPENGYM_MCP_WRITE=${OPENGYM_MCP_WRITE:-}
+      # Its secret for the api's internal route. Not OPENGYM_MCP_TOKEN, which remote clients hold.
+      - OPENGYM_MCP_API_TOKEN=${OPENGYM_MCP_API_TOKEN:-}
+      - OPENGYM_API_URL=http://${BACKEND:-api}:${PORT:-3000}
+      - OPENGYM_MCP_JOURNAL=/app/journal
+      - TZ=${OPENGYM_TZ:-UTC}
+    volumes:
+      # Only what the server reads: its own code, the training logic it shares with the app, the data.
+      - ./mcp:/app/mcp:ro
+      - ./frontend/src:/app/frontend/src:ro
+      # "type": "module" for frontend/src, rather than leaving Node to guess the module format.
+      - ./frontend/package.json:/app/frontend/package.json:ro
+      - ./data:/app/data:ro
+      # The undo history. A sibling of ./data on purpose, like ./coach-auth: the documented
+      # `tar czf … data/` backup is of the profile, not of what an agent did to it.
+      - ./mcp-journal:/app/journal
+    # Host port for poking at it directly. Loopback-only unless MCP_BIND says otherwise: the web
+    # container is the way in, and a published port skips the host firewall (Docker's rules come
+    # first). Changing MCP_PORT alone never widens it.
+    ports:
+      - "${MCP_BIND:-127.0.0.1}:${MCP_PORT:-8765}:8765"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8765/healthz"]
+      interval: 5m
+      timeout: 5s
+      retries: 3
+
+  api:
+    # The MCP writes through the api's /internal/mcp/state routes, which this tree has and the
+    # prebuilt image does not: build the api from source whenever this file is in use. It is the
+    # small image — no frontend in it — so building it is cheap even on a modest box.
+    image: opengym-api:local
+    pull_policy: build
+
+  web:
+    # The /mcp location lives in this tree's nginx template. Mounting it means the prebuilt web
+    # image carries /mcp too, without being rebuilt from source.
+    volumes:
+      - ./web/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro

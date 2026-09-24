@@ -6,7 +6,7 @@ import { registerCustom } from '../lib/exercises.js'
 import { DEMO, DEMO_SEEDED } from '../lib/demo.js'
 import { guestAllowed } from '../lib/guest.js'
 import { MOBILE, initReminderSync, nativeLoad, nativeSave, onAppActive, syncReminder, writeAutoBackup } from '../lib/mobile.js'
-import { mergeStates, localExtras } from '../lib/sync-merge.js'
+import { mergeStates, localExtras, syncedChanged } from '../lib/sync-merge.js'
 import { loadRemote, chooseLocal, forgetRemote, connect } from '../lib/remote.js'
 import { loadCoachDevice, saveCoachDevice, coachDeviceSettings } from '../lib/coach-device.js'
 
@@ -331,9 +331,15 @@ export const useStore = create((set, get) => {
 
     // Mutate a draft of S via producer fn, then persist + schedule sync.
     update(mut, push = true) {
-      const S = clone(get().S)
+      const prev = get().S
+      const S = clone(prev)
       mut(S)
-      persist(S, push)
+      // A change to the workout in progress alone stays on this device, undated and unpushed
+      // (syncedChanged). Every set tap used to push the whole document, and a tap landing after
+      // another device's write turned into a merge this copy won on `_ts` alone — undoing that
+      // write. Now the half-minute poll just adopts it, `active` kept (pullState).
+      const synced = syncedChanged(prev, S)
+      persist(S, push && synced, synced)
     },
     // A replace that is meant to reach the server (backup import, reset) is a deliberate
     // overwrite, not a change to merge: the push it arms goes without a baseRev.

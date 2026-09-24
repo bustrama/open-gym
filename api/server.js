@@ -680,6 +680,87 @@ if (AUDIT_ON) {
   setInterval(compactAudit, 3600000).unref();    // honour AUDIT_DAYS on an idle instance too
 }
 
+/* ---------- the profile document's one write path ---------- */
+// Every writer of a profile's document goes through this compare-and-write — a device's
+// PUT /api/data and the MCP's internal route alike — so the cleanup, the stripped in-progress
+// workout, the server-owned revision and the 409 cannot drift apart between them.
+// Returns [status, body] for the caller to send.
+function conditionalWrite(uid, body) {
+  if (!body.state || typeof body.state !== 'object') return [400, { error: 'state required' }];
+  // The reminder tick and the admin routes iterate these two on the server's side, so a truthy
+  // non-array would throw there on every pass for as long as it sat on disk. Absent or null is
+  // fine — every client fills its own defaults. An array is `typeof 'object'` but no document:
+  // `_rev` set on it is dropped by JSON.stringify, so the file would read back as rev 0 while
+  // the response claimed the next revision.
+  const list = v => v == null || Array.isArray(v);
+  if (Array.isArray(body.state) || !list(body.state.workouts) || !list(body.state.routines)) return [400, { error: 'invalid state' }];
+  // The same readers walk every entry (`w.d`, `w.name`). They skip what is not an entry now
+  // (`records` above), but nothing should be storing one. Dropped, not refused:
+  // such an entry carries nothing worth keeping, whereas a 400 would strand a client whose own
+  // copy is already malformed — it keeps re-sending the same document and never syncs again.
+  for (const k of ['workouts', 'routines']) if (Array.isArray(body.state[k])) body.state[k] = records(body.state[k]);
+  // Conditional write: a `baseRev` that is not the current revision means this client last
+  // read an older document — another device has written since — and the copy it is about to
+  // push would silently drop that write. The current document travels back with the 409, so
+  // the client can merge and try again without a second request. No `baseRev` (a client from
+  // before revisions, or a deliberate replace such as a backup import) overwrites, as before.
+  // readState and atomicWrite are synchronous with nothing awaited between them, so the
+  // compare-and-write is atomic for this process.
+  const cur = readState(uid);
+  const curRev = cur?._rev || 0;
+  if (body.baseRev != null && body.baseRev !== curRev) {
+    return [409, { error: 'conflict', rev: curRev, state: cur }];
+  }
+  delete body.state.active;              // in-progress workouts stay device-local
+  body.state._rev = curRev + 1;          // server-owned; whatever the client sent is ignored
+  atomicWrite(stateFile(uid), JSON.stringify(body.state));
+  return [200, { ok: true, ts: body.state._ts || null, rev: body.state._rev }];
+}
+
+/* ---------- MCP write access (opt-in) ---------- */
+// The MCP server (mcp/, docker-compose.mcp.yml) changes a profile the way a device does — read
+// the document, change it, write it back conditionally — through two routes of its own instead
+// of touching the file, so this process stays the only writer and the revision check covers the
+// MCP too. A device open at the time picks the change up like any other device's.
+//
+// Deliberately not under /api/: the web container proxies only /api/ and /mcp, and the api's
+// port is not published, so nothing outside the compose network reaches them. Anything that did
+// come through nginx is refused anyway — it always adds X-Real-IP / X-Forwarded-For, which the
+// MCP container calling in directly never sends — and the path check in the dispatcher stops a
+// `..\` spelling from getting that far. Beyond that, all three of these must hold or both
+// routes answer 404, as if they did not exist:
+//   OPENGYM_MCP_WRITE=1, OPENGYM_MCP_API_TOKEN (16+ characters, sent as a Bearer token),
+//   OPENGYM_UID.
+// OPENGYM_MCP_API_TOKEN is the MCP server's secret for this route alone — not OPENGYM_MCP_TOKEN,
+// which remote LLM clients hold to reach /mcp. The profile is fixed by OPENGYM_UID on this side;
+// nothing in a request can name another one. Revoking it is rotating the token (or unsetting the
+// flag) and restarting — a device's "Sign out everywhere" does not reach it, because it never
+// held a session.
+const MCP_UID = String(process.env.OPENGYM_UID || '').trim();
+const MCP_API_TOKEN = String(process.env.OPENGYM_MCP_API_TOKEN || '');
+const MCP_ON = /^(1|true|yes|on)$/i.test(process.env.OPENGYM_MCP_WRITE || '')
+  && MCP_API_TOKEN.length >= 16 && /^[a-zA-Z0-9_-]+$/.test(MCP_UID);
+const sha256 = s => crypto.createHash('sha256').update(String(s)).digest();
+const MCP_TOKEN_DIGEST = sha256(MCP_API_TOKEN);
+let mcpDeniedAudited = 0;
+// The profile an MCP call acts on, or null once it has answered. Digests on both sides of the
+// compare, so neither the token's length nor its content leaks through timing.
+function mcpCaller(req, res) {
+  if (!MCP_ON || req.headers['x-real-ip'] || req.headers['x-forwarded-for']) { json(res, 404, { error: 'not found' }); return null; }
+  const m = /^Bearer\s+(\S+)\s*$/i.exec(req.headers.authorization || '');
+  if (!m || !crypto.timingSafeEqual(sha256(m[1]), MCP_TOKEN_DIGEST)) {
+    // Recorded, unlike an anonymous 401 on /api: only the compose network reaches this at all,
+    // so a wrong token here is a misconfiguration or something worse. At most once a minute,
+    // so nothing can flush the log with it.
+    if (Date.now() - mcpDeniedAudited > 60000) { mcpDeniedAudited = Date.now(); audit(req, 'auth.mcp.denied', { ok: false }); }
+    json(res, 401, { error: 'unauthorized' });
+    return null;
+  }
+  const user = db.users.find(u => u.id === MCP_UID);
+  if (!user || user.disabled) { json(res, 403, { error: 'forbidden' }); return null; }
+  return user;
+}
+
 /* ---------- routes ---------- */
 const routes = {
   'GET /api/health': async (req, res) => json(res, 200, { ok: true, users: db.users.length }),
@@ -910,36 +991,29 @@ const routes = {
   'PUT /api/data': async (req, res) => {
     const user = readSession(req);
     if (!user) return json(res, 401, { error: 'not signed in' });
+    const [status, out] = conditionalWrite(user.id, await readBody(req));
+    json(res, status, out);
+  },
+
+  // The MCP server's read and write, for the one profile OPENGYM_UID names (see mcpCaller above).
+  'GET /internal/mcp/state': async (req, res) => {
+    const user = mcpCaller(req, res);
+    if (!user) return;
+    const state = readState(user.id);
+    json(res, 200, { state, rev: state?._rev || 0 });
+  },
+  'PUT /internal/mcp/state': async (req, res) => {
+    const user = mcpCaller(req, res);
+    if (!user) return;
     const body = await readBody(req);
-    if (!body.state || typeof body.state !== 'object') return json(res, 400, { error: 'state required' });
-    // The reminder tick and the admin routes iterate these two on the server's side, so a truthy
-    // non-array would throw there on every pass for as long as it sat on disk. Absent or null is
-    // fine — every client fills its own defaults. An array is `typeof 'object'` but no document:
-    // `_rev` set on it is dropped by JSON.stringify, so the file would read back as rev 0 while
-    // the response claimed the next revision.
-    const list = v => v == null || Array.isArray(v);
-    if (Array.isArray(body.state) || !list(body.state.workouts) || !list(body.state.routines)) return json(res, 400, { error: 'invalid state' });
-    // The same readers walk every entry (`w.d`, `w.name`). They skip what is not an entry now
-    // (`records` above), but nothing should be storing one. Dropped, not refused:
-    // such an entry carries nothing worth keeping, whereas a 400 would strand a client whose own
-    // copy is already malformed — it keeps re-sending the same document and never syncs again.
-    for (const k of ['workouts', 'routines']) if (Array.isArray(body.state[k])) body.state[k] = records(body.state[k]);
-    // Conditional write: a `baseRev` that is not the current revision means this client last
-    // read an older document — another device has written since — and the copy it is about to
-    // push would silently drop that write. The current document travels back with the 409, so
-    // the client can merge and try again without a second request. No `baseRev` (a client from
-    // before revisions, or a deliberate replace such as a backup import) overwrites, as before.
-    // readState and atomicWrite are synchronous with nothing awaited between them, so the
-    // compare-and-write is atomic for this process.
-    const cur = readState(user.id);
-    const curRev = cur?._rev || 0;
-    if (body.baseRev != null && body.baseRev !== curRev) {
-      return json(res, 409, { error: 'conflict', rev: curRev, state: cur });
-    }
-    delete body.state.active;              // in-progress workouts stay device-local
-    body.state._rev = curRev + 1;          // server-owned; whatever the client sent is ignored
-    atomicWrite(stateFile(user.id), JSON.stringify(body.state));
-    json(res, 200, { ok: true, ts: body.state._ts || null, rev: body.state._rev });
+    // Always conditional: unlike a device, the MCP never replaces a document it has not read.
+    if (!Number.isInteger(body.baseRev)) return json(res, 400, { error: 'baseRev required' });
+    // Which tool, never what it wrote: the log is for who changed the plan, not a copy of it.
+    // Settled before the write, so nothing about `op` can fail a write that has already landed.
+    const op = typeof body.op === 'string' && /^[a-z_]{1,60}$/.test(body.op) ? body.op : 'write';
+    const [status, out] = conditionalWrite(user.id, body);
+    if (status === 200) audit(req, 'admin.mcp.write', { user, msg: `${op} r${out.rev}` });
+    json(res, status, out);
   },
 
   'GET /api/push/public-key': async (req, res) => json(res, 200, { key: vapid.publicKey }),
@@ -1236,6 +1310,11 @@ http.createServer(async (req, res) => {
   let url;
   try { url = new URL(req.url, 'http://x'); }
   catch { return json(res, 400, { error: 'bad request' }); }
+  // Routes are matched on the path exactly as it was sent. The URL parser turns `\` into `/` and
+  // resolves `..`, which nginx's `^~ /api/` prefix match does not: `/api/..\internal/...` sails
+  // through the web container's /api/ proxy and parses here as `/internal/...`. No route has a
+  // spelling that parsing would change, so one that changes is refused rather than rewritten.
+  if (req.url.split('?')[0] !== url.pathname) return json(res, 400, { error: 'bad request' });
   const key = req.method + ' ' + url.pathname;
   const handler = routes[key];
   if (!handler) return json(res, 404, { error: 'not found' });

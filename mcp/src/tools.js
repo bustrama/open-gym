@@ -7,7 +7,7 @@ import {
   fmt, setLabel, exLine, muscleName, policyName, friendlyDuration, ratio, muscleOrder
 } from './labels.js'
 import {
-  modeOf, workoutVolume, setsDone, effectiveRoutine, effectiveRoutineId, lastEntryFor
+  modeOf, workoutVolume, setsDone, effectiveRoutine, effectiveRoutineId, lastEntryFor, isBw, isPerSide
 } from '../../frontend/src/lib/history.js'
 import { exOr } from '../../frontend/src/lib/exercises.js'
 import { isWarmupRow } from '../../frontend/src/lib/workout-model.js'
@@ -21,9 +21,9 @@ import { buildSessionEntries } from '../../frontend/src/lib/session-start.js'
 /* ---------- helpers ---------- */
 
 // A custom exercise lives in S.customEx and is merged into EXIDX by registerCustom() at
-// store load (useStore.js:54). The MCP server deliberately never calls it: http.js serves
-// several profiles from one process behind withRemoteState, so mutating the module-global
-// index would leak one profile's customs into another's reads.
+// store load (useStore.js:54). These read tools look customs up directly instead, so they
+// never depend on what the index holds. (The routine write tools do register them: a
+// process answers for exactly one profile, OPENGYM_UID, so there is no one else to leak to.)
 const customOf = (id, S) => (S.customEx || []).find(ex => ex.id === id)
 // exOr's miss is a placeholder object, not null — callers that only need a name are fine
 // with it, callers feeding muscle resolution are NOT. Use customOf directly there.
@@ -117,6 +117,7 @@ export const getRoutine = {
       id: r.id,
       name: r.name,
       emoji: r.emoji || null,
+      progression_override: r.prog || null,
       policy: policyFor(null, r, 'reps'),
       policy_name: policyName(policyFor(null, r, 'reps')),
       exclude_from_progression: r.excludeFromProgression === true,
@@ -146,6 +147,15 @@ export const getRoutine = {
           policy: policyFor(cfg, r, mode),
           policy_override: cfg.prog || null,
           superset_group: cfg.sg || null,
+          // The rest of what update_routine accepts, so a read → edit → write round trip keeps
+          // every field the routine editor can set.
+          bodyweight: mode === 'cardio' ? undefined : isBw(cfg),
+          per_side: mode === 'reps' ? isPerSide(cfg) : undefined,
+          warmup_sets: cfg.warmupSets > 0 ? cfg.warmupSets : undefined,
+          note: cfg.note || undefined,
+          intensifier: !cfg.intensifier ? undefined
+            : cfg.intensifier.type === 'dropset' ? { type: 'dropset', count: cfg.intensifier.count, pct: cfg.intensifier.pct }
+              : { type: cfg.intensifier.type, total_reps: cfg.intensifier.totalReps, rest_sec: cfg.intensifier.restSec },
           summary: exLine(cfg, S.unit || 'kg')
         }
       })

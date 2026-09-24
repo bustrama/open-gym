@@ -324,3 +324,45 @@ describe('ordering', () => {
     expect(gets()).toHaveLength(3)
   })
 })
+
+// A set tap mid-workout changes nothing but `active`. It used to re-date and push the whole copy,
+// so a tap landing just after another device (or the MCP server) wrote merged over that write and
+// won every `_ts` rule — renames, the week plan, settings silently undone.
+describe('the workout in progress stays on the device', () => {
+  it('a change to `active` alone neither re-dates the copy nor pushes it', async () => {
+    vi.useFakeTimers()
+    signedIn({ ...clone(DEF), _ts: 100, routines: [routine('r1')], active: { id: 'running', cur: 0 } })
+    localStorage.setItem('gym_sync', JSON.stringify({ rev: 1, ts: 100 }))
+    useStore.getState().update(s => { s.active.cur = 1 })
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(useStore.getState().S._ts).toBe(100)
+    expect(useStore.getState().S.active.cur).toBe(1)
+    expect(puts()).toHaveLength(0)
+    expect(JSON.parse(localStorage.getItem('gym_state_v1')).active.cur).toBe(1)
+  })
+
+  it('a real change still dates the copy and pushes it', async () => {
+    vi.useFakeTimers()
+    signedIn({ ...clone(DEF), _ts: 100, active: { id: 'running', cur: 0 } })
+    localStorage.setItem('gym_sync', JSON.stringify({ rev: 1, ts: 100 }))
+    api.mockResolvedValue({ ok: true, rev: 2 })
+    useStore.getState().update(s => { s.restSec = 60 })
+    expect(useStore.getState().S._ts).toBeGreaterThan(100)
+    await vi.advanceTimersByTimeAsync(2000)
+    expect(puts()).toHaveLength(1)
+    expect(puts()[0].state.restSec).toBe(60)
+  })
+
+  it('the report: another writer renames a routine while this device trains — the next pull adopts it, the session kept', async () => {
+    vi.useFakeTimers()
+    signedIn({ ...clone(DEF), _ts: 100, routines: [routine('r1')], active: { id: 'running', cur: 0 } })
+    localStorage.setItem('gym_sync', JSON.stringify({ rev: 1, ts: 100 }))
+    useStore.getState().update(s => { s.active.cur = 3 })            // a set tapped
+    await vi.advanceTimersByTimeAsync(2000)
+    api.mockResolvedValueOnce({ state: { ...clone(DEF), _ts: 150, routines: [{ ...routine('r1'), name: 'Upper A' }], _rev: 2 }, rev: 2 })
+    await useStore.getState().pullState()
+    expect(puts()).toHaveLength(0)
+    expect(useStore.getState().S.routines[0].name).toBe('Upper A')
+    expect(useStore.getState().S.active).toEqual({ id: 'running', cur: 3 })
+  })
+})

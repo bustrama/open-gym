@@ -148,3 +148,86 @@ describe('session notes', () => {
     expect('note' in buildCompletedWorkout(a)).toBe(false)
   })
 })
+
+// finishSession / sessionPrs: the finish button's effects on the profile, now one function shared
+// with the MCP server's log_workout. These pin what doFinishWorkout did inline before it moved.
+import { finishSession, sessionPrs } from './finish-workout.js'
+import { EXDB, isCardio, isAssisted } from './exercises.js'
+
+describe('finishSession — what finishing does to the profile', () => {
+  const bench = '0025'
+  const assisted = (EXDB.find(e => isAssisted(e.id) && !isCardio(e.id)) || {}).id
+  const profile = () => ({
+    exWeights: { [bench]: { w: 60, d: '2026-08-01' } },
+    workouts: [
+      { id: 'w1', d: '2026-08-01', start: 100, end: 200, name: 'Push', entries: [{ id: bench, sets: [{ w: 60, r: 5, done: true }] }], prs: [] },
+      { id: 'w2', d: '2026-08-10', start: 300, end: 400, name: 'Push', entries: [{ id: bench, sets: [{ w: 60, r: 5, done: true }] }], prs: [] }
+    ]
+  })
+  const session = (sets, extra = {}) => ({
+    id: 'new', d: '2026-08-20', start: 1000, routineIds: ['r1'], name: 'Push', bw: 80,
+    entries: [{ id: bench, sets, target: { sets: 3, reps: 5, weight: 62.5, mode: 'reps' }, rid: 'r1' }], ...extra
+  })
+
+  it('a live session: heavier work set is a PR, the working weight goes up, the record is appended with its volume', () => {
+    const S = profile()
+    const { workout, prs } = finishSession(S, session([{ w: 62.5, r: 5, done: true }, { w: 62.5, r: 5, done: true }]), { now: 5000 })
+    expect(prs).toEqual([bench])
+    expect(workout.prs).toEqual([bench])
+    expect(workout.end).toBe(5000)
+    expect(workout.vol).toBe(625)
+    expect(S.exWeights[bench]).toEqual({ w: 62.5, d: '2026-08-20' })
+    expect(S.workouts.at(-1).id).toBe('new')
+  })
+
+  it('a warm-up row is never a record, and the same weight is not a PR', () => {
+    const S = profile()
+    const { prs } = finishSession(S, session([{ w: 100, r: 3, done: true, phase: 'warmup' }, { w: 60, r: 5, done: true }]), { now: 5000 })
+    expect(prs).toEqual([])
+    expect(S.exWeights[bench].w).toBe(60)
+  })
+
+  it('an exercise with no completed work is not kept, and changes nothing', () => {
+    const S = profile()
+    const { workout } = finishSession(S, session([{ w: 90, r: 5, done: false }]), { now: 5000 })
+    expect(workout.entries).toEqual([])
+    expect(S.exWeights[bench].w).toBe(60)
+  })
+
+  it('a past session claims no records, leaves the working weights, and is filed in date order', () => {
+    const S = profile()
+    const past = session([{ w: 80, r: 5, done: true }], { d: '2026-08-05', start: 250, backfill: { durationMin: 45, replaceId: null } })
+    const { workout, prs } = finishSession(S, past)
+    expect(prs).toEqual([])
+    expect(workout.end).toBe(250 + 45 * 60000)
+    expect(S.exWeights[bench].w).toBe(60)
+    expect(S.workouts.map(w => w.id)).toEqual(['w1', 'new', 'w2'])
+  })
+
+  it('a past session can replace the workout it was logged over', () => {
+    const S = profile()
+    finishSession(S, session([{ w: 55, r: 5, done: true }], { d: '2026-08-10', start: 300, backfill: { durationMin: 60, replaceId: 'w2' } }))
+    expect(S.workouts.map(w => w.id)).toEqual(['w1', 'new'])
+  })
+
+  it('sessionPrs reads the history before the session, the same as finishSession', () => {
+    const S = profile()
+    expect(sessionPrs(S, session([{ w: 65, r: 1, done: true }]))).toEqual([bench])
+    expect(sessionPrs(S, session([{ w: 65, r: 1, done: true }], { backfill: { durationMin: 60 } }))).toEqual([])
+  })
+
+  it.skipIf(!assisted)('on an assisted machine less help is the record', () => {
+    const S = { exWeights: { [assisted]: { w: 40, d: 'x' } }, workouts: [{ id: 'a', d: '2026-08-01', start: 1, entries: [{ id: assisted, sets: [{ w: 40, r: 8, done: true }] }] }] }
+    const s = { id: 'n', d: '2026-08-20', start: 2, routineIds: [], name: 'x', entries: [{ id: assisted, sets: [{ w: 30, r: 8, done: true }] }] }
+    const { prs } = finishSession(S, s, { now: 3 })
+    expect(prs).toEqual([assisted])
+    expect(S.exWeights[assisted].w).toBe(30)
+  })
+
+  it('a profile without workouts or working weights yet still takes its first session', () => {
+    const S = {}
+    finishSession(S, session([{ w: 40, r: 5, done: true }]), { now: 9 })
+    expect(S.workouts).toHaveLength(1)
+    expect(S.exWeights[bench].w).toBe(40)
+  })
+})

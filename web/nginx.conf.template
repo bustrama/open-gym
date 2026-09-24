@@ -53,6 +53,31 @@ server {
         proxy_set_header CF-Connecting-IP "${CF_CONNECTING_IP}";
     }
 
+    # MCP over HTTP (opt-in, docker-compose.mcp.yml), carried on the app's own origin for a tunnel
+    # or proxy that maps one hostname to one port. Exact match, so nothing below can take it.
+    # Without the mcp service this answers 502, as /api would without the api. The MCP server
+    # does its own bearer-token auth; this block only carries the request there.
+    location = ${BASE_PATH}/mcp {
+        client_max_body_size 1m;
+        # Per-request resolution, for the same reason as /api above. Lowercase variable, so the
+        # entrypoint's envsubst leaves it alone.
+        resolver ${RESOLVER} valid=10s ipv6=off;
+        set $mcp_upstream http://mcp:8765;
+        # nginx matched this after normalising the path, so //mcp, /./mcp and /%6dcp all land
+        # here. An auth proxy in front that scopes a policy to /mcp need not normalise the same
+        # way; serve only the one spelling such a policy is written for.
+        if ($request_uri !~ "^${BASE_PATH}/mcp(\?|$)") { return 404; }
+        # The MCP server answers at /mcp only, whatever prefix the public URL carries.
+        rewrite ^ /mcp break;
+        proxy_pass $mcp_upstream;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Answers are plain JSON today; unbuffered keeps a streamed one working if that changes.
+        proxy_buffering off;
+    }
+
     # The app routes behind the hash (/#/plan, /#/history …), so a path is never a screen, and the
     # shell's asset URLs are relative (vite base './' — the Pages demo lives under /demo/). Serving
     # index.html AT a deep path (/plan/r/x: a typo, a stale link) gave a page whose scripts resolved

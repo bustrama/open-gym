@@ -18,7 +18,8 @@ api/       backend — server.js (Node, no framework), deps: @simplewebauthn/ser
 web/       multi-stage Dockerfile (builds frontend → nginx) + nginx.conf.template (serves app, proxies /api).
 mcp/       optional MCP server — read-only stdio bridge exposing a user's workouts/1RM/muscle
            balance to LLM clients (Claude Desktop, Cursor…). Not part of the Docker build; only
-           runs when an LLM client spawns it.
+           runs when an LLM client spawns it — or, opt-in, as an HTTP service for remote clients
+           (docker-compose.mcp.yml).
 media/     exercise img/gif, gitignored, fetched at runtime by the `media` compose service.
 website/   static marketing site (plain HTML/CSS/JS), deployed separately by .gitlab-ci.yml.
 docs/      SELF_HOSTING.md, MOBILE.md.
@@ -107,8 +108,16 @@ Read-only stdio MCP bridge (`@modelcontextprotocol/sdk`) that lets an LLM client
 user's routines/workouts/body-weight/1RM/muscle-balance directly from the same `DATA_DIR` the API
 writes to — no network call, no extra container. `state.js` loads/derives the data, `tools.js`
 defines the exposed MCP tools (zod-validated schemas), `labels.js` maps internal keys to
-human-readable labels, `index.js` wires it together. See `mcp/README.md` for the client-config
-side (Claude Desktop / Cursor).
+human-readable labels, `server.js` registers the tools on an `McpServer`, and two entry points
+serve it: `index.js` over stdio, `http.js` over stateless Streamable HTTP (bearer-token auth,
+fails closed without `OPENGYM_MCP_TOKEN`; opt-in container in `docker-compose.mcp.yml`). With
+`OPENGYM_MCP_WRITE=1` it also writes (`edit-tools.js`, `routine-tools.js`, `workout-tools.js`,
+`library-tools.js`) — never to a file: `writer.js` reads/writes through the api's internal
+`/internal/mcp/state` routes (own secret `OPENGYM_MCP_API_TOKEN`; proxied requests refused) (`api/server.js` `conditionalWrite`, shared with `PUT /api/data`),
+retrying on a 409, and `journal.js` keeps keyed patches for undo. Writes reuse the app's own
+logic: `lib/ex-config.js` (routine editor save) and `lib/finish-workout.js` `finishSession` (the
+Finish button, which calls it too). See `mcp/README.md` for the client-config side (Claude
+Desktop / Cursor / remote clients).
 
 ### Passkeys and self-hosting constraints
 

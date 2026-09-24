@@ -11,7 +11,7 @@
  * Run by bare `node` on purpose — being outside vitest IS the check. Do not port this to a
  * vitest test file; that would make it pass unconditionally.
  *
- * Importing the two entry modules is enough on its own: everything the server touches hangs off
+ * Importing the entry modules is enough on its own: everything the server touches hangs off
  * them, so a lib module that grows a browser-only dependency next year fails here without this
  * list being updated. The named list below only exists to point at the culprit instead of at a
  * stack trace ten frames deep.
@@ -22,7 +22,7 @@ const LIB = new URL('../../frontend/src/lib/', import.meta.url)
 // which one, rather than which import chain.
 const MODULES = [
   'i18n-core.js', 'format.js', 'exercises.js', 'exercises-data.js',
-  'history.js', 'muscles.js', 'onerm.js', 'progression.js'
+  'history.js', 'muscles.js', 'onerm.js', 'progression.js', 'ex-config.js'
 ]
 
 let failed = 0
@@ -38,7 +38,9 @@ for (const m of MODULES) {
 
 // The real assertion: the server's own entry points, which pull the whole graph transitively.
 // A module added to the graph later is covered by this even if the list above never learns it.
-for (const entry of ['../src/state.js', '../src/tools.js']) {
+// server.js and http.js add the SDK side: the tool registration both transports share, and the
+// HTTP transport (imported, not started — http.js only listens when it is the process's entry).
+for (const entry of ['../src/state.js', '../src/tools.js', '../src/server.js', '../src/http.js', '../src/edit-tools.js', '../src/routine-tools.js', '../src/workout-tools.js', '../src/library-tools.js', '../src/writes.js']) {
   try {
     await import(new URL(entry, import.meta.url))
     console.log(`  ok    mcp/${entry.replace('../', '')}`)

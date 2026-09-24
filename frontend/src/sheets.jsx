@@ -28,7 +28,7 @@ import { exerciseHistory } from './lib/exercise-history.js'
 import { nextPrescription, applyPrescription, policyFor, defaultIncrement, POLICIES_FOR, POLICY_NAME, POLICY_DESC, MAX_BW_SETS, weightIncrement } from './lib/progression.js'
 import { normalizeRepRange } from './lib/rep-range.js'
 import { MOBILE, shareExport, printHtml } from './lib/mobile.js'
-import { buildCompletedWorkout } from './lib/finish-workout.js'
+import { finishSession, sessionPrs } from './lib/finish-workout.js'
 import { isWarmupRow, hasCompletedWork } from './lib/workout-model.js'
 import { nextUnfinishedUnit } from './lib/supersetFlow.js'
 import { swapActiveExercise } from './lib/active-exercise-swap.js'
@@ -2189,36 +2189,20 @@ function doFinishWorkout() {
   const st = S()
   const A = st.active
   if (!A) return
-  const past = !!A.backfill
-  const prs = []
+  // The load PRs, the record, the confirmed working weights and where it is filed all come from
+  // lib/finish-workout.js — the same code the MCP server's log_workout runs. A workout logged
+  // into the past claims no records there and leaves the confirmed weights alone.
+  const prs = sessionPrs(st, A)
+  // A heavier estimate without a heavier top set is its own kind of progress — same weight for
+  // more reps. Reported separately so it can't be read as a load PR. Display only.
   const e1prs = []
-  // A workout logged into the past cannot claim records against the history that came after
-  // it, so a backfilled session reports none and leaves the confirmed weights alone.
-  if (!past) A.entries.forEach(e => {
-    const loads = e.sets.filter(s => s.done && !isWarmupRow(s)).map(s => s.w).filter(w => w > 0)
-    const mx = loads.length ? loads.reduce((a, b) => betterWeight(e.id, a, b)) : 0
-    if (beatsWeight(e.id, mx, bestWeightFor(st, e.id))) prs.push(e.id)
-    // A heavier estimate without a heavier top set is its own kind of progress —
-    // same weight for more reps. Reported separately so it can't be read as a load PR.
+  if (!A.backfill) A.entries.forEach(e => {
     const rec = is1RMRecord(st, e.id, e)
     if (rec && !prs.includes(e.id)) e1prs.push({ id: e.id, ...rec })
   })
-  const w = buildCompletedWorkout(A, {
-    end: past ? backfillEnd(A) : Date.now(),
-    prs,
-    snapshotFor: e => EXIDX[e.id]?.custom ? exerciseMuscleSnapshot(EXIDX[e.id]) : null,
-  })
-  w.vol = workoutVolume(w)
+  let w
   update(s => {
-    if (past) {
-      s.workouts = completeBackfill(s.workouts, A, w)
-    } else {
-      w.entries.forEach(e => {
-        const mx = bestWeightForEntry(e)
-        if (mx > 0 && beatsWeight(e.id, mx, (s.exWeights[e.id] || {}).w || 0)) s.exWeights[e.id] = { w: mx, d: w.d }
-      })
-      s.workouts.push(w)
-    }
+    w = finishSession(s, A, { snapshotFor: e => EXIDX[e.id]?.custom ? exerciseMuscleSnapshot(EXIDX[e.id]) : null }).workout
     s.active = null
   })
   useStore.getState().autoBackupNow()

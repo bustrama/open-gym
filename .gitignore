@@ -4,6 +4,7 @@ media/gif/
 
 # Runtime data — users, passkeys, per-user state, session secret
 data/
+mcp-journal/
 
 # Local config
 .env

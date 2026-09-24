@@ -151,3 +151,20 @@ describe('sign-in adoption helpers', () => {
     expect(mergeStates(server, local).unit).toBe('kg')   // without prefer the newer copy decides
   })
 })
+
+import { syncedChanged } from './sync-merge.js'
+
+describe('syncedChanged — what counts as a change to the account', () => {
+  const base = { unit: 'kg', routines: [{ id: 'r1', name: 'A', ex: [] }], workouts: [], _ts: 1, _rev: 3 }
+  it('the workout in progress and the stamps are not', () => {
+    expect(syncedChanged(base, { ...base, active: { id: 'x', cur: 2 }, _ts: 99, _rev: 4 })).toBe(false)
+    expect(syncedChanged({ ...base, active: { cur: 1 } }, { ...base, active: { cur: 2 } })).toBe(false)
+  })
+  it('anything else is — a setting, a routine, a key added or removed', () => {
+    expect(syncedChanged(base, { ...base, unit: 'lb' })).toBe(true)
+    expect(syncedChanged(base, { ...base, routines: [{ id: 'r1', name: 'B', ex: [] }] })).toBe(true)
+    expect(syncedChanged(base, { ...base, targetW: 70 })).toBe(true)
+    const { unit, ...noUnit } = base
+    expect(syncedChanged(base, noUnit)).toBe(true)
+  })
+})
