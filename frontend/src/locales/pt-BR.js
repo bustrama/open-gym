@@ -678,6 +678,9 @@ export const PT_BR_OVERRIDES = {
   'Up next: {0}': 'A seguir: {0}',
   'Add as superset': 'Adicionar como superset',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Faz a contagem regressiva na tela de bloqueio e avisa quando o descanso termina.',
+  'A 10-second rest: the countdown, then the alert.': 'Um descanso de 10 segundos: a contagem regressiva e depois o alerta.',
+  'Test rest started: look at the status bar.': 'Descanso de teste iniciado: veja a barra de status.',
+  'Rest timer notifications are turned off in Android settings.': 'As notificações do temporizador de descanso estão desativadas nas configurações do Android.',
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

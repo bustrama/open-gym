@@ -1278,4 +1278,9 @@ export default {
   'Rest over': 'Pause vorbei',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Zählt auf dem Sperrbildschirm herunter und meldet sich, wenn die Pause vorbei ist.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Releases werden auf github.com geprüft. Der Download wird vor dem Öffnen des Installers gegen seine Prüfsumme verifiziert.',
+  'Test the rest timer': 'Pausen-Timer testen',
+  'A 10-second rest: the countdown, then the alert.': 'Eine Pause von 10 Sekunden: der Countdown, dann die Meldung.',
+  'Test rest started: look at the status bar.': 'Test-Pause gestartet: Schau in die Statusleiste.',
+  'Rest timer notifications are turned off in Android settings.': 'Die Benachrichtigungen des Pausen-Timers sind in den Android-Einstellungen ausgeschaltet.',
+  'The rest timer could not be shown ({0}).': 'Der Pausen-Timer konnte nicht angezeigt werden ({0}).',
 }

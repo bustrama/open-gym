@@ -4,7 +4,10 @@
 // alert, which is then the only thing telling anyone; one that runs out on screen already beeped.
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest'
 
-const phone = vi.hoisted(() => ({ showRest: vi.fn(), clearRest: vi.fn(), restText: vi.fn(() => 'Bench Press') }))
+const phone = vi.hoisted(() => ({
+  showRest: vi.fn(), clearRest: vi.fn(), restText: vi.fn(() => 'Bench Press'),
+  restProblem: vi.fn(r => (r && r.shown === false ? `problem: ${r.reason}` : null)),
+}))
 vi.mock('../lib/rest-notify.js', () => phone)
 
 import { useUI } from './useUI.js'
@@ -82,6 +85,20 @@ describe('the phone follows the rest', () => {
     await vi.advanceTimersByTimeAsync(3000)
     expect(useUI.getState().timer).toBe(null)
     expect(phone.clearRest).toHaveBeenCalledWith({ keepAlert: false })
+  })
+
+  // The "told once" mark lives as long as the module, a whole app session: no other test here
+  // may expect this toast.
+  it('says once per session why nothing shows', async () => {
+    phone.showRest.mockResolvedValue({ shown: false, reason: 'notifications-off' })
+    useUI.getState().startRest(90)
+    await vi.waitFor(() => expect(useUI.getState().toastMsg).toBe('problem: notifications-off'))
+    useUI.setState({ toastMsg: '' })
+    useUI.getState().startRest(90)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(phone.showRest).toHaveBeenCalledTimes(2)
+    expect(useUI.getState().toastMsg).toBe('')
+    phone.showRest.mockReset()
   })
 
   it('does not carry "ran out" over to the next rest', async () => {

@@ -1258,4 +1258,9 @@ export default {
   'Rest over': 'Отдых окончен',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Обратный отсчёт на экране блокировки и сигнал, когда отдых окончен.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Релизы проверяются на github.com. Перед запуском установщика загрузка сверяется с контрольной суммой.',
+  'Test the rest timer': 'Проверить таймер отдыха',
+  'A 10-second rest: the countdown, then the alert.': 'Отдых на 10 секунд: обратный отсчёт, затем сигнал.',
+  'Test rest started: look at the status bar.': 'Тестовый отдых запущен: посмотрите на строку состояния.',
+  'Rest timer notifications are turned off in Android settings.': 'Уведомления таймера отдыха отключены в настройках Android.',
+  'The rest timer could not be shown ({0}).': 'Не удалось показать таймер отдыха ({0}).',
 }
