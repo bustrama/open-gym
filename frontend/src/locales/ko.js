@@ -1255,4 +1255,7 @@ export default {
   'Tap an exercise to go to it.': '운동을 탭하면 그 운동으로 이동해요.',
   'Up next: {0}': '다음: {0}',
   'Add as superset': '슈퍼세트로 추가',
+  'Rest over': '휴식 끝',
+  'Counts down on the lock screen, and alerts you when the rest is over.': '잠금 화면에서 카운트다운하고, 휴식이 끝나면 알려 줘요.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': '릴리스는 github.com에서 확인합니다. 설치 프로그램이 열리기 전에 다운로드의 체크섬을 검증합니다.',
 }

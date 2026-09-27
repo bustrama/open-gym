@@ -1255,4 +1255,7 @@ export default {
   'Tap an exercise to go to it.': 'Stuknij ćwiczenie, aby do niego przejść.',
   'Up next: {0}': 'Następne: {0}',
   'Add as superset': 'Dodaj jako superserię',
+  'Rest over': 'Koniec przerwy',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Odlicza na ekranie blokady i powiadamia, gdy przerwa się skończy.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Wydania są sprawdzane na github.com. Pobrany plik jest weryfikowany sumą kontrolną przed otwarciem instalatora.',
 }

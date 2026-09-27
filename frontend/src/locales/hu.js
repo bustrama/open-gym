@@ -1258,4 +1258,7 @@ export default {
   'Tap an exercise to go to it.': 'Koppints egy gyakorlatra, hogy odaugorj.',
   'Up next: {0}': 'Következik: {0}',
   'Add as superset': 'Hozzáadás szuperszettként',
+  'Rest over': 'Pihenő vége',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Visszaszámol a zárolási képernyőn, és szól, ha vége a pihenőnek.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'A kiadásokat a github.com-on ellenőrizzük. A letöltést a telepítő megnyitása előtt az ellenőrzőösszeggel vetjük össze.',
 }

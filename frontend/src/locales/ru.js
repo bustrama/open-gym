@@ -1255,4 +1255,7 @@ export default {
   'Tap an exercise to go to it.': 'Нажмите на упражнение, чтобы перейти к нему.',
   'Up next: {0}': 'Далее: {0}',
   'Add as superset': 'Добавить как суперсет',
+  'Rest over': 'Отдых окончен',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Обратный отсчёт на экране блокировки и сигнал, когда отдых окончен.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Релизы проверяются на github.com. Перед запуском установщика загрузка сверяется с контрольной суммой.',
 }

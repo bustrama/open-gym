@@ -20,6 +20,8 @@ function githubRepo() {
   return /^[\w.-]+\/[\w.-]+$/.test(repo || '') ? repo : null
 }
 
+export const updatesFromGitHub = () => !!githubRepo()
+
 // Where a person is sent when there is no APK to install from the app.
 export function releasesPage() {
   const repo = githubRepo()

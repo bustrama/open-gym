@@ -43,6 +43,13 @@
          on Android 12+. Where it isn't granted, scheduling silently falls back to inexact
          alarms — the reminder still arrives, just not to the minute. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <!-- The alert at the end of a rest (src/lib/rest-notify.js) is due to the second, and
+         Android 14+ denies SCHEDULE_EXACT_ALARM to new installs: an inexact alarm can land a
+         minute late. USE_EXACT_ALARM is granted at install, for alarm and timer apps; the Play
+         Store polices that, a sideloaded APK is not on it. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Android 16: lets the rest countdown (RestTimerPlugin) show as a Live Update chip. -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- Gym check-in: scanning a membership QR/barcode with the camera. -->
     <uses-permission android:name="android.permission.CAMERA" />
 </manifest>

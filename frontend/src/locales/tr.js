@@ -1255,4 +1255,7 @@ export default {
   'Tap an exercise to go to it.': 'Gitmek için bir egzersize dokun.',
   'Up next: {0}': 'Sıradaki: {0}',
   'Add as superset': 'Süperset olarak ekle',
+  'Rest over': 'Dinlenme bitti',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Kilit ekranında geri sayar ve dinlenme bittiğinde seni uyarır.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Sürümler github.com üzerinde denetlenir. İndirme, yükleyici açılmadan önce sağlama toplamıyla doğrulanır.',
 }

@@ -1255,4 +1255,7 @@ export default {
   'Tap an exercise to go to it.': 'Tocca un esercizio per andarci.',
   'Up next: {0}': 'Prossimo: {0}',
   'Add as superset': 'Aggiungi come superset',
+  'Rest over': 'Riposo finito',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Conto alla rovescia sulla schermata di blocco e un avviso quando il riposo è finito.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Le release vengono controllate su github.com. Il download è verificato con il suo checksum prima di aprire l’installer.',
 }

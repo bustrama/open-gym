@@ -1255,4 +1255,7 @@ export default {
   'Tap an exercise to go to it.': '点按一个动作即可跳转到它。',
   'Up next: {0}': '下一个：{0}',
   'Add as superset': '添加为超级组',
+  'Rest over': '休息结束',
+  'Counts down on the lock screen, and alerts you when the rest is over.': '在锁屏上倒计时，休息结束时提醒你。',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': '版本在 github.com 上检查。安装程序打开前会校验下载文件的校验和。',
 }

@@ -13,7 +13,8 @@ import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, isAndroid, shareExport, syncReminder } from '../lib/mobile.js'
-import { checkForUpdate, downloadAndInstall, releasesPage } from '../lib/update.js'
+import { checkForUpdate, downloadAndInstall, releasesPage, updatesFromGitHub } from '../lib/update.js'
+import { allowRestNotify, clearRest } from '../lib/rest-notify.js'
 import { forgetCoach } from '../lib/coach-api.js'
 import { ConnectSheet } from './MobileOnboarding.jsx'
 import { starterPlanSheet, confirmSheet, importFromApp, importFromHevy, equipmentProfileSheet, menuSheet, askAddDeviceData } from '../sheets.jsx'
@@ -343,7 +344,7 @@ export default function Settings() {
       </Row>
     </Section>
 
-    {(user || MOBILE) && <NotificationsCard S={S} update={update} toast={toast} />}
+    {(user || MOBILE) && <NotificationsCard S={S} update={update} toast={toast} android={android} />}
 
     {/* ---------- equipment ---------- */}
     <EquipmentCard S={S} update={update} />
@@ -416,7 +417,7 @@ export default function Settings() {
         newer (checksum verified, see onUpdateRowClick). On the web the app updates with its
         server, so the row points at the APK for the phone instead. iOS has no APK: nothing. */}
     {(!MOBILE || android) && <Section title={t('Updates')}
-      footer={MOBILE ? t('Releases are checked on gitlab.com. The download is verified against its checksum before the installer opens.') : t('The web app updates together with your server. The Android app installs its own updates from here.')}>
+      footer={MOBILE ? (updatesFromGitHub() ? t('Releases are checked on github.com. The download is verified against its checksum before the installer opens.') : t('Releases are checked on gitlab.com. The download is verified against its checksum before the installer opens.')) : t('The web app updates together with your server. The Android app installs its own updates from here.')}>
       {MOBILE
         ? <Row icon="download" iconTint="var(--acc)"
             title={updateInfo?.hasUpdate ? t('Update to openGym v{0}', updateInfo.latestVersion) : t('Check for updates')}
@@ -532,15 +533,17 @@ function effortHelpSheet() {
   </>)
 }
 
-function NotificationsCard({ S, update, toast }) {
-  if (MOBILE) return <MobileReminderCard S={S} update={update} toast={toast} />
+function NotificationsCard({ S, update, toast, android }) {
+  if (MOBILE) return <MobileReminderCard S={S} update={update} toast={toast} android={android} />
   return <PushCard S={S} update={update} toast={toast} />
 }
 
 // Mobile build: the reminder is a native local notification scheduled on planned weekdays —
 // no push server involved. The schedule itself is (re)synced by the store on every persist;
 // this card only owns the OS permission prompt when the switch turns on.
-function MobileReminderCard({ S, update, toast }) {
+// The rest timer switch (Android only): the countdown on the lock screen and the alert when the
+// rest is over (lib/rest-notify.js). It takes effect from the next rest.
+function MobileReminderCard({ S, update, toast, android }) {
   const setReminder = patch => update(s => { s.reminder = { ...(s.reminder || DEF.reminder), ...patch, tz: localTZ() } })
   const toggle = async () => {
     const on = !S.reminder?.on
@@ -549,6 +552,12 @@ function MobileReminderCard({ S, update, toast }) {
       if (!ok) { toast(t('Could not change notification settings')); return }
     }
     setReminder({ on })
+  }
+  const toggleRest = async () => {
+    const on = !S.restNotify
+    if (on && !(await allowRestNotify())) { toast(t('Could not change notification settings')); return }
+    if (!on) clearRest()
+    update(s => { s.restNotify = on })
   }
   return (
     <Section title={t('Notifications')}
@@ -560,6 +569,11 @@ function MobileReminderCard({ S, update, toast }) {
         <Row icon="clock" iconTint="var(--purple)" title={t('Reminder time')}>
           <input type="time" className="timef" value={S.reminder?.time || DEF.reminder.time}
             onChange={e => setReminder({ time: e.target.value })} />
+        </Row>
+      )}
+      {android && (
+        <Row icon="timer" iconTint="var(--acc)" title={t('Rest timer')} subtitle={t('Counts down on the lock screen, and alerts you when the rest is over.')}>
+          <Switch checked={!!S.restNotify} onChange={toggleRest} />
         </Row>
       )}
     </Section>

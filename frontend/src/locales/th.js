@@ -1266,4 +1266,7 @@ export default {
   'Tap an exercise to go to it.': 'แตะท่าออกกำลังกายเพื่อไปที่ท่านั้น',
   'Up next: {0}': 'ถัดไป: {0}',
   'Add as superset': 'เพิ่มเป็นซูเปอร์เซ็ต',
+  'Rest over': 'หมดเวลาพัก',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'นับถอยหลังบนหน้าจอล็อก และแจ้งเตือนเมื่อหมดเวลาพัก',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'ตรวจสอบรุ่นจาก github.com ไฟล์ที่ดาวน์โหลดจะถูกตรวจ checksum ก่อนเปิดตัวติดตั้ง',
 }

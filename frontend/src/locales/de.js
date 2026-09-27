@@ -1275,4 +1275,7 @@ export default {
   'Tap an exercise to go to it.': 'Tippe auf eine Übung, um zu ihr zu springen.',
   'Up next: {0}': 'Als Nächstes: {0}',
   'Add as superset': 'Als Supersatz hinzufügen',
+  'Rest over': 'Pause vorbei',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Zählt auf dem Sperrbildschirm herunter und meldet sich, wenn die Pause vorbei ist.',
+  'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Releases werden auf github.com geprüft. Der Download wird vor dem Öffnen des Installers gegen seine Prüfsumme verifiziert.',
 }

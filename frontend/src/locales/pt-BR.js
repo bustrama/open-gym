@@ -677,6 +677,7 @@ export const PT_BR_OVERRIDES = {
   'Tap an exercise to go to it.': 'Toque em um exercício para ir até ele.',
   'Up next: {0}': 'A seguir: {0}',
   'Add as superset': 'Adicionar como superset',
+  'Counts down on the lock screen, and alerts you when the rest is over.': 'Faz a contagem regressiva na tela de bloqueio e avisa quando o descanso termina.',
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

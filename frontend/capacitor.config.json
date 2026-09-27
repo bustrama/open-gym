@@ -5,5 +5,10 @@
   "backgroundColor": "#0c0e12",
   "android": {
     "allowMixedContent": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_opengym"
+    }
   }
 }

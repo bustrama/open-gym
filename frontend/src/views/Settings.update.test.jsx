@@ -25,6 +25,9 @@ const mocks = vi.hoisted(() => {
   })
   state.checkForUpdate = vi.fn(() => Promise.resolve({ hasUpdate: true, latestVersion: '9.9.9', apkUrl: 'https://x/opengym.apk', hashUrl: null }))
   state.confirmSheet = vi.fn()
+  state.fromGitHub = false
+  state.allowRestNotify = vi.fn(() => Promise.resolve(true))
+  state.clearRest = vi.fn()
   return state
 })
 vi.mock('../store/useStore.js', () => {
@@ -53,6 +56,12 @@ vi.mock('../lib/mobile.js', () => ({
 vi.mock('../lib/update.js', () => ({
   checkForUpdate: (...a) => mocks.checkForUpdate(...a),
   downloadAndInstall: vi.fn(),
+  releasesPage: () => 'https://gitlab.com/DuarteSantos8/opengym/-/releases',
+  updatesFromGitHub: () => mocks.fromGitHub,
+}))
+vi.mock('../lib/rest-notify.js', () => ({
+  allowRestNotify: (...a) => mocks.allowRestNotify(...a),
+  clearRest: (...a) => mocks.clearRest(...a),
 }))
 vi.mock('./MobileOnboarding.jsx', () => ({ ConnectSheet: () => null }))
 vi.mock('../sheets.jsx', () => ({
@@ -72,6 +81,9 @@ beforeEach(() => {
   mocks.android = false
   mocks.checkForUpdate.mockClear()
   mocks.confirmSheet.mockClear()
+  mocks.fromGitHub = false
+  mocks.allowRestNotify.mockClear()
+  mocks.clearRest.mockClear()
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -140,5 +152,61 @@ describe('Settings — in-app update check', () => {
     await mount()
     expect(updateRow()).toBeUndefined()
     expect(checkRow()).toBeTruthy()
+  })
+
+  it('a fork build says its releases come from github.com', async () => {
+    mocks.MOBILE = true
+    mocks.android = true
+    mocks.fromGitHub = true
+    await mount()
+    expect(host.textContent).toContain('Releases are checked on github.com.')
+    expect(host.textContent).not.toContain('gitlab.com')
+  })
+})
+
+// The rest timer on the lock screen, and the alert when it is over (lib/rest-notify.js): an
+// Android-only switch, and the one place that asks for the notification permission for it.
+describe('Settings — rest timer notifications', () => {
+  const restRow = () => [...host.querySelectorAll('.lrow')].find(r => r.textContent.includes('Counts down on the lock screen'))
+  const flip = async () => { await act(async () => { restRow().querySelector('[role=switch]').click(); await Promise.resolve() }) }
+
+  it('is offered on Android only', async () => {
+    mocks.MOBILE = true
+    await mount()
+    expect(restRow()).toBeUndefined()
+    act(() => root.unmount())
+    root = createRoot(host)
+    mocks.android = true
+    await mount()
+    expect(restRow()).toBeTruthy()
+  })
+
+  it('asks for the permission when turned on, then keeps the choice', async () => {
+    mocks.MOBILE = true
+    mocks.android = true
+    await mount()
+    await flip()
+    expect(mocks.allowRestNotify).toHaveBeenCalledTimes(1)
+    expect(mocks.S.restNotify).toBe(true)
+  })
+
+  it('stays off when the permission is refused', async () => {
+    mocks.MOBILE = true
+    mocks.android = true
+    mocks.allowRestNotify.mockResolvedValueOnce(false)
+    await mount()
+    await flip()
+    expect(mocks.S.restNotify).toBeUndefined()
+  })
+
+  it('turned off, it takes down the notifications of a running rest', async () => {
+    mocks.MOBILE = true
+    mocks.android = true
+    mocks.S.restNotify = true
+    await mount()
+    await flip()
+    expect(mocks.allowRestNotify).not.toHaveBeenCalled()
+    expect(mocks.clearRest).toHaveBeenCalledTimes(1)
+    expect(mocks.S.restNotify).toBe(false)
   })
 })

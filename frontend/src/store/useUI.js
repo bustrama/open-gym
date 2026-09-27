@@ -4,6 +4,7 @@ import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { deviceId } from '../lib/push.js'
+import { showRest, clearRest, restText } from '../lib/rest-notify.js'
 import { useStore } from './useStore.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
@@ -52,6 +53,15 @@ const maybeRestNotification = async () => {
   }
 }
 
+// The phone's notifications for a rest (lib/rest-notify.js), from the store's state.
+const phoneRest = endsAt => {
+  const { S } = useStore.getState()
+  if (S.restNotify) showRest(S, { endsAt, text: restText(S.active, useUI.getState().timer?.forIdx) })
+}
+// Set by the tick that finds the rest over, for the stopRest() it then calls: whether that
+// happened in front of someone, who then got the beep and needs no second alert from the phone.
+let restRanOut = null
+
 let toastTm = null
 let timerInt = null
 let timerTick = null
@@ -96,6 +106,7 @@ export const useUI = create((set, get) => ({
     const endsAt = Date.now() + sec * 1000
     set({ timer: { left: sec, total: sec, endsAt, forIdx, forSet } })
     pushRestTimer(sec)
+    phoneRest(endsAt)
     timerTick = () => {
       const tm = get().timer
       if (!tm) return
@@ -113,6 +124,7 @@ export const useUI = create((set, get) => ({
         // without push permission, gets no notification, and a countdown that silently vanishes
         // on reopen reads like a bug. Only the loud parts (beep, vibration, flash) are gated.
         get().toast(t('Rest over — next set!'))
+        restRanOut = { seen: seenLive }
         maybeRestNotification(); get().stopRest(); return
       }
       if (left <= 3) beep(snd, 660, 0.1)
@@ -130,6 +142,7 @@ export const useUI = create((set, get) => ({
     if (left <= 0) { get().stopRest(); return }
     set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
     pushRestTimer(left)
+    phoneRest(tm.endsAt + sec * 1000)
   },
   // The active list changed shape (an exercise removed or inserted at `at`): keep the rest
   // pointing at the same exercise. Returns nothing; the caller decides whether to stop instead.
@@ -149,7 +162,11 @@ export const useUI = create((set, get) => ({
   stopRest() {
     if (timerInt) clearInterval(timerInt); timerInt = null
     if (timerTick) document.removeEventListener('visibilitychange', timerTick); timerTick = null
-    if (get().timer) cancelPushRestTimer()
+    if (get().timer) {
+      cancelPushRestTimer()
+      clearRest({ keepAlert: !!restRanOut && !restRanOut.seen })
+    }
+    restRanOut = null
     set({ timer: null })
   },
 
