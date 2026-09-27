@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Runs inside the emulator job: installs the debug APK, starts a real rest in a workout, and taps
 # the countdown notification's −15s / +15s / Skip buttons from the shade: with the app in front,
-# in the background, and with its process gone. Records what the app and the system then have.
-# Everything lands in $OUT.
+# in the background, with its process gone, and on a PIN lock screen. Records what the app and
+# the system then have. Everything lands in $OUT.
 set -x
 OUT=smoke-out
 mkdir -p $OUT
@@ -11,15 +11,13 @@ PROBE="node .github/android-smoke/probe.mjs"
 APK=frontend/android/app/build/outputs/apk/debug/app-debug.apk
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 notif() { adb shell dumpsys notification --noredact > "$OUT/$1.txt"; grep -n -A40 "NotificationRecord.*pkg=$PKG.*id=$2" "$OUT/$1.txt" | grep -E "NotificationRecord|when=|actions=|  \[[0-9]\] \"|channel=|importance" | head -12; }
-alarm() { adb shell dumpsys alarm > "$OUT/$1.txt"; grep -n -B2 -A6 "$PKG" "$OUT/$1.txt" | grep -E "REST_ALERT|origWhen|when=|type=" | head -8; }
-# Taps the node whose resource-id or text matches, from a uiautomator dump.
-tap_ui() {
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null
-  adb shell cat /sdcard/ui.xml > $OUT/ui-$2.xml
-  B=$(grep -o "<node[^>]*\($1\)[^>]*>" $OUT/ui-$2.xml | head -1 | grep -o 'bounds="[^"]*"' | grep -o '[0-9]\+')
-  set -- $B
-  if [ -n "$4" ]; then adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 )); echo "tapped $1,$2"; else echo "NOT FOUND"; fi
-}
+alarm() { adb shell dumpsys alarm > "$OUT/$1.txt"; grep -n -A2 "origWhen.*$PKG" "$OUT/$1.txt" | grep -E "origWhen" | head -4; }
+# uiautomator cannot dump the shade while a chronometer ticks (it never goes idle), so the
+# buttons are tapped where the 320x640 emulator draws them, our notification being the first.
+BY=344
+tap_less() { adb shell input tap 83 $BY; }
+tap_more() { adb shell input tap 143 $BY; }
+tap_skip() { adb shell input tap 199 $BY; }
 shade() { adb shell cmd statusbar expand-notifications; sleep 2; }
 collapse() { adb shell cmd statusbar collapse; sleep 1; }
 forward() {
@@ -28,7 +26,10 @@ forward() {
   adb forward tcp:9222 localabstract:webview_devtools_remote_$PID
 }
 timer() { $PROBE '__timer()'; }
-status() { $PROBE 'Capacitor.nativePromise("RestTimer", "status", {})'; }
+status() { $PROBE 'Capacitor.nativePromise("RestTimer", "status", {}).then(s => ({ active: s.active, actions: s.actions, rest: s.rest, alarm: s.alarm }))'; }
+changes() { $PROBE 'window.__changes'; }
+# A rest straight from the plugin, for the steps without the app: seconds from now.
+plugin_rest() { $PROBE "Capacitor.nativePromise('RestTimer', 'start', { key: '$1', endsAt: Date.now() + $2 * 1000, title: 'Rest', text: 'Plugin rest', alertTitle: 'Rest over', step: 15, lessLabel: '−15s', moreLabel: '+15s', skipLabel: 'Skip' })"; }
 
 adb shell getprop ro.build.version.release
 adb install -r -g "$APK"
@@ -37,7 +38,7 @@ adb shell am start -W -n $PKG/ch.duartesantos.opengym.MainActivity
 sleep 15
 forward
 
-# Local mode, the rest notifications on, a 60-second rest, and a workout under way.
+# Local mode, the rest notifications on, a 3-minute rest, and a workout under way.
 $PROBE '__clickText("Use on this device")'
 sleep 3
 $PROBE '__seedWorkout()'
@@ -46,104 +47,116 @@ forward
 $PROBE 'location.hash = "#/workout"'
 sleep 3
 $PROBE '__listen()'
-shot 01-workout
 
-# 1. A set ticked: the rest starts, with its countdown and three buttons.
+echo "=== 1. a set ticked: the rest starts"
 $PROBE '__tick()'
-sleep 3
+sleep 2
 timer
 status
-notif 02-countdown 7100
+notif 01-countdown 7100
+alarm 01-alarm
+
+echo "=== 2. +15s from the shade, the app in front"
+shade
+shot 02-shade
+tap_more
+sleep 2
+shot 02-shade-after
+collapse
+timer
+changes
+status
+notif 02-after-plus 7100
 alarm 02-alarm
-shot 02-rest-started
 
-# 2. +15s from the shade, the app in front.
+echo "=== 3. -15s the same way"
 shade
-shot 03-shade
-tap_ui 'text="+15s"' 03
+tap_less
 sleep 2
 collapse
 timer
-$PROBE 'window.__changes'
-status
-notif 04-after-plus 7100
-alarm 04-alarm
-
-# 3. −15s the same way.
-shade
-tap_ui 'text="−15s"' 05
-sleep 2
-collapse
-timer
-$PROBE 'window.__changes'
+changes
 status
 
-# 4. The app in the background: +15s, then back to the app.
+echo "=== 4. the app in the background: +15s, then back to the app"
 adb shell input keyevent KEYCODE_HOME
 sleep 2
 shade
-tap_ui 'text="+15s"' 06
+tap_more
 sleep 2
 collapse
 status
 adb shell am start -W -n $PKG/ch.duartesantos.opengym.MainActivity
-sleep 3
-timer
-$PROBE 'window.__changes'
-shot 07-back-in-app
-
-# 5. The lock screen: +15s on the keyguard without unlocking.
-adb shell input keyevent KEYCODE_SLEEP
-sleep 2
-adb shell input keyevent KEYCODE_WAKEUP
-sleep 2
-shot 08-keyguard
-tap_ui 'text="+15s"' 08
-sleep 2
-shot 09-keyguard-after
-status
-adb shell wm dismiss-keyguard
-adb shell input keyevent 82
-sleep 2
-adb shell am start -W -n $PKG/ch.duartesantos.opengym.MainActivity
 sleep 2
 timer
+changes
+shot 04-back-in-app
 
-# 6. Skip from the shade: the rest ends in the app, countdown and alarm gone.
+echo "=== 5. Skip from the shade: the rest ends in the app, countdown and alarm gone"
 shade
-tap_ui 'text="Skip"' 10
+tap_skip
 sleep 2
 collapse
 timer
-$PROBE 'window.__changes'
+changes
 status
-alarm 11-alarm-after-skip
-shot 11-after-skip
+alarm 05-alarm-after-skip
+shot 05-after-skip
 
-# 7. No app process: a new rest, the app sent home and killed, +15s tapped. The receiver runs in
-#    a process of its own and moves the countdown and the alarm.
-$PROBE "__tick()"
-sleep 3
+echo "=== 6. -15s with less than 15s left ends the rest"
+$PROBE '__tick()'
+sleep 2
+timer
+# Only the tick's rest has the app's key; move the phone's copy to 10 seconds from now by hand.
+$PROBE 'Capacitor.nativePromise("RestTimer", "status", {}).then(s => Capacitor.nativePromise("RestTimer", "start", { key: s.rest.key, endsAt: Date.now() + 10000, title: "Rest", step: 15, lessLabel: "−15s", moreLabel: "+15s", skipLabel: "Skip" }))'
+shade
+tap_less
+sleep 2
+collapse
+changes
 status
-notif 12-before-kill 7100
+timer
+
+echo "=== 7. no app process: the countdown up, the app sent home and killed, +15s tapped"
+plugin_rest k7 40
+sleep 1
+status
+notif 07-before-kill 7100
+alarm 07-alarm-before
 adb shell input keyevent KEYCODE_HOME
 sleep 2
 adb shell am kill $PKG
 sleep 2
 adb shell pidof $PKG || echo "no process"
 shade
-tap_ui 'text="+15s"' 13
+tap_more
 sleep 3
 collapse
 adb shell pidof $PKG || echo "no process"
-notif 13-after-kill-plus 7100
-alarm 13-alarm
+notif 07-after-kill-plus 7100
+alarm 07-alarm-after
 
-# 8. Let that rest run out unwatched: the alert rings on rest-over.
-sleep 90
-notif 14-alert 7101
-shot 14-alert
+echo "=== 8. that rest runs out unwatched: the alert rings on rest-over"
+sleep 60
+notif 08-alert 7101
+shot 08-alert
+
+echo "=== 9. a PIN lock screen: the countdown's buttons there"
+adb shell am start -W -n $PKG/ch.duartesantos.opengym.MainActivity
+sleep 5
+forward
+plugin_rest k9 120
+sleep 1
+adb shell locksettings set-pin 1234
+adb shell input keyevent KEYCODE_SLEEP
+sleep 2
+adb shell input keyevent KEYCODE_WAKEUP
+sleep 2
+shot 09-keyguard
+adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml > $OUT/09-keyguard.xml
+adb shell dumpsys window | grep -E "mDreamingLockscreen|isKeyguardShowing|mShowingLockscreen|KeyguardController" | head -5
 
 adb logcat -d > $OUT/logcat.txt
-grep -i -E "RestTimer|AndroidRuntime|FATAL|Capacitor/Console" $OUT/logcat.txt | tail -60
+grep -E "FATAL EXCEPTION" -A2 $OUT/logcat.txt | head -20
+grep -i -E "RestTimer" $OUT/logcat.txt | grep -v "Capacitor/Plugin\|callback:" | tail -20
 exit 0

@@ -30,7 +30,7 @@ window.__rowSwitch = txt => { const sw = window.__row(txt).querySelector('[role=
 window.__rowChecked = txt => window.__row(txt).querySelector('[role=switch]').getAttribute('aria-checked')
 window.__rowClick = txt => { window.__row(txt).click(); return 'clicked' }
 window.__state = () => JSON.parse(localStorage.getItem('gym_state_v1') || 'null')
-// A workout under way (two exercises, three sets each), a 60-second rest and the rest
+// A workout under way (two exercises, three sets each), a 3-minute rest and the rest
 // notifications on. Nothing is stored yet right after onboarding (the store fills in the
 // defaults on load); a weigh-in and _ts ahead keep the file mirror from winning on the reload.
 window.__seedWorkout = () => {
@@ -39,7 +39,7 @@ window.__seedWorkout = () => {
   S.bodyweight = [{ d: today, w: 80, t: Date.now() }]
   const e = id => ({ id, target: { sets: 3, reps: 8 }, sets: [0, 1, 2].map(() => ({ w: 60, r: 8, done: false })) })
   S.restNotify = true
-  S.restSec = 60
+  S.restSec = 180
   S.active = { id: 'smoke', d: today, start: Date.now(), routineId: null, name: 'Smoke', bw: null, cur: 0, entries: [e('0025'), e('0739')] }
   S._ts = Date.now() + 600000
   localStorage.setItem('gym_state_v1', JSON.stringify(S))
