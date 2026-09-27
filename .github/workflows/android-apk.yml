@@ -1,0 +1,134 @@
+# The fork's own Android APK: built, signed with the fork's key, and published as a GitHub
+# release, which is where the app's updater looks (VITE_UPDATE_GITHUB_REPO, lib/update.js).
+# Upstream builds its APK on GitLab (.gitlab-ci.yml, build:apk); this is the same recipe for a
+# fork, which cannot sign with upstream's key.
+#
+# Run it from the Actions tab (Run workflow) or with `gh workflow run android-apk.yml`.
+# Each run is version <package.json version>-fork.<run number>, e.g. 1.3.8-fork.4, with
+# versionCode <upstream versionCode> * 1000 + <run number>: every build installs over the one
+# before it, across upstream version bumps too.
+#
+# Needs three repository secrets (Settings → Secrets and variables → Actions):
+#   ANDROID_KEYSTORE_B64       base64 of the fork's release keystore, on one line
+#   ANDROID_KEYSTORE_PASSWORD  its password (the store's and the key's)
+#   ANDROID_KEY_ALIAS          the key's alias
+# KEEP THAT KEYSTORE: updates must be signed with the same key, or Android refuses to install
+# them over the app.
+name: Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Publish as a GitHub release (the app offers it as an update)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The release notes list the commits since the previous fork release.
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      # Capacitor 7's Android project builds with Java 21.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: |
+            frontend/android/**/*.gradle*
+            frontend/android/**/gradle-wrapper.properties
+      - run: npm ci
+        working-directory: frontend
+      - run: npm test
+        working-directory: frontend
+
+      - name: Version
+        id: version
+        working-directory: frontend
+        run: |
+          set -eu
+          VER="$(node -p "require('./package.json').version")-fork.$GITHUB_RUN_NUMBER"
+          BASE="$(sed -n 's/^ *versionCode \([0-9]*\).*/\1/p' android/app/build.gradle | head -1)"
+          CODE=$((BASE * 1000 + GITHUB_RUN_NUMBER))
+          sed -i -E "s/^( *versionCode )[0-9]+/\1$CODE/; s/^( *versionName )\".*\"/\1\"$VER\"/" android/app/build.gradle
+          grep -E '^ *version(Code|Name) ' android/app/build.gradle
+          echo "ver=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        working-directory: frontend
+        env:
+          APP_VERSION: ${{ steps.version.outputs.ver }}
+          VITE_UPDATE_GITHUB_REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          # VITE_MOBILE build + `cap sync` into android/.
+          npm run build:mobile
+          cd android
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Sign
+        env:
+          VER: ${{ steps.version.outputs.ver }}
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -eu
+          # An unsigned APK cannot be installed: stop rather than publish one.
+          if [ -z "$ANDROID_KEYSTORE_B64" ] || [ -z "$ANDROID_KEYSTORE_PASSWORD" ] || [ -z "$ANDROID_KEY_ALIAS" ]; then
+            echo "::error::The signing secrets are not set (ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS)."
+            exit 1
+          fi
+          BT="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          KS="$RUNNER_TEMP/release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > "$KS"
+          "$BT/zipalign" -f -p 4 frontend/android/app/build/outputs/apk/release/app-release-unsigned.apk "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign \
+            --ks "$KS" \
+            --ks-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --ks-key-alias "$ANDROID_KEY_ALIAS" \
+            --key-pass env:ANDROID_KEYSTORE_PASSWORD \
+            --out "openGym-$VER.apk" "$RUNNER_TEMP/aligned.apk"
+          rm -f "$KS"
+          "$BT/apksigner" verify --print-certs "openGym-$VER.apk"
+          sha256sum "openGym-$VER.apk" > "openGym-$VER.apk.sha256"
+          cat "openGym-$VER.apk.sha256"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: openGym-${{ steps.version.outputs.ver }}
+          path: openGym-*.apk*
+
+      - name: Release
+        if: inputs.release
+        env:
+          VER: ${{ steps.version.outputs.ver }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          PREV="$(git describe --tags --abbrev=0 --match 'v*-fork.*' 2>/dev/null || true)"
+          {
+            echo "Built from ${GITHUB_SHA::7}. SHA-256: \`$(cut -d' ' -f1 "openGym-$VER.apk.sha256")\`"
+            echo
+            if [ -n "$PREV" ]; then echo "Since $PREV:"; git log --no-merges --format='- %s' "$PREV..HEAD"
+            else echo "Latest commits:"; git log --no-merges -15 --format='- %s'; fi
+          } > notes.md
+          gh release create "v$VER" "openGym-$VER.apk" "openGym-$VER.apk.sha256" \
+            --target "$GITHUB_SHA" --title "openGym $VER" --notes-file notes.md --latest
