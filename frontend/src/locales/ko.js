@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': '테스트 휴식을 시작했어요: 상태 표시줄을 확인하세요.',
   'Rest timer notifications are turned off in Android settings.': 'Android 설정에서 휴식 타이머 알림이 꺼져 있어요.',
   'The rest timer could not be shown ({0}).': '휴식 타이머를 표시할 수 없었어요 ({0}).',
+  '−{0}s': '−{0}초',
+  '+{0}s': '+{0}초',
 }

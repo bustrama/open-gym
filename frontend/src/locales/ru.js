@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': 'Тестовый отдых запущен: посмотрите на строку состояния.',
   'Rest timer notifications are turned off in Android settings.': 'Уведомления таймера отдыха отключены в настройках Android.',
   'The rest timer could not be shown ({0}).': 'Не удалось показать таймер отдыха ({0}).',
+  '−{0}s': '−{0} с',
+  '+{0}s': '+{0} с',
 }

@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': 'Descanso de teste iniciado: veja a barra de estado.',
   'Rest timer notifications are turned off in Android settings.': 'As notificações do temporizador de descanso estão desativadas nas definições do Android.',
   'The rest timer could not be shown ({0}).': 'Não foi possível mostrar o temporizador de descanso ({0}).',
+  '−{0}s': '−{0} s',
+  '+{0}s': '+{0} s',
 }

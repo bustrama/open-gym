@@ -6,6 +6,7 @@ import { exOr } from '../lib/exercises.js'
 import { capWords } from '../lib/format.js'
 import { upNextAfterRest } from '../lib/active-workout-order.js'
 import { Button } from './ui.jsx'
+import { REST_STEP } from '../lib/rest-timing.js'
 
 const clock = sec => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0')
 
@@ -56,8 +57,8 @@ export default function RestTimer() {
         </div>
       </div>
       <div className="acts">
-        <Button size="sm" icon="minus" onClick={() => addRest(-15)}>15s</Button>
-        <Button size="sm" icon="plus" onClick={() => addRest(15)}>15s</Button>
+        <Button size="sm" icon="minus" onClick={() => addRest(-REST_STEP)}>{REST_STEP}s</Button>
+        <Button size="sm" icon="plus" onClick={() => addRest(REST_STEP)}>{REST_STEP}s</Button>
         <Button size="sm" variant="primary" className="skip" onClick={stopRest}>{t('Skip')}</Button>
       </div>
     </div>

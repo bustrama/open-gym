@@ -1275,4 +1275,6 @@ export default {
   'Test rest started: look at the status bar.': 'เริ่มการพักทดสอบแล้ว: ดูที่แถบสถานะ',
   'Rest timer notifications are turned off in Android settings.': 'การแจ้งเตือนของตัวจับเวลาพักถูกปิดอยู่ในการตั้งค่า Android',
   'The rest timer could not be shown ({0}).': 'แสดงตัวจับเวลาพักไม่ได้ ({0})',
+  '−{0}s': '−{0} วินาที',
+  '+{0}s': '+{0} วินาที',
 }

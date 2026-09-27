@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': '测试休息已开始：请看状态栏。',
   'Rest timer notifications are turned off in Android settings.': '休息计时的通知已在 Android 设置中关闭。',
   'The rest timer could not be shown ({0}).': '无法显示休息计时（{0}）。',
+  '−{0}s': '−{0}秒',
+  '+{0}s': '+{0}秒',
 }

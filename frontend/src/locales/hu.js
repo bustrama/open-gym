@@ -1267,4 +1267,6 @@ export default {
   'Test rest started: look at the status bar.': 'A próbapihenő elindult: nézd meg az állapotsort.',
   'Rest timer notifications are turned off in Android settings.': 'A pihenő időzítő értesítései ki vannak kapcsolva az Android beállításaiban.',
   'The rest timer could not be shown ({0}).': 'A pihenő időzítőt nem sikerült megjeleníteni ({0}).',
+  '−{0}s': '−{0} mp',
+  '+{0}s': '+{0} mp',
 }

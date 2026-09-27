@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': 'Testowa przerwa rozpoczęta: spójrz na pasek stanu.',
   'Rest timer notifications are turned off in Android settings.': 'Powiadomienia minutnika przerwy są wyłączone w ustawieniach Androida.',
   'The rest timer could not be shown ({0}).': 'Nie udało się pokazać minutnika przerwy ({0}).',
+  '−{0}s': '−{0} s',
+  '+{0}s': '+{0} s',
 }

@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': 'Deneme dinlenmesi başladı: durum çubuğuna bak.',
   'Rest timer notifications are turned off in Android settings.': 'Dinlenme sayacı bildirimleri Android ayarlarında kapalı.',
   'The rest timer could not be shown ({0}).': 'Dinlenme sayacı gösterilemedi ({0}).',
+  '−{0}s': '−{0} sn',
+  '+{0}s': '+{0} sn',
 }

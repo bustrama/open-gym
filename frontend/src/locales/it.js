@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': 'Riposo di prova avviato: guarda la barra di stato.',
   'Rest timer notifications are turned off in Android settings.': 'Le notifiche del timer di riposo sono disattivate nelle impostazioni di Android.',
   'The rest timer could not be shown ({0}).': 'Impossibile mostrare il timer di riposo ({0}).',
+  '−{0}s': '−{0} s',
+  '+{0}s': '+{0} s',
 }

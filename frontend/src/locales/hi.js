@@ -1264,4 +1264,6 @@ export default {
   'Test rest started: look at the status bar.': 'परीक्षण आराम शुरू: स्टेटस बार देखें।',
   'Rest timer notifications are turned off in Android settings.': 'आराम टाइमर की सूचनाएँ Android सेटिंग में बंद हैं।',
   'The rest timer could not be shown ({0}).': 'आराम टाइमर नहीं दिखा सके ({0})।',
+  '−{0}s': '−{0} सेकंड',
+  '+{0}s': '+{0} सेकंड',
 }
