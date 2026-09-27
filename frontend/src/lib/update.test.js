@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { checkForUpdate, sha256, resetUpdateCheck } from './update.js'
+import { checkForUpdate, sha256, resetUpdateCheck, compareSemver, releasesPage } from './update.js'
 
 // __APP_VERSION__ is defined at build time by vite.config.js (reads package.json).
 // In the test environment vitest applies the same define, so it's available here.
@@ -278,5 +278,84 @@ describe('semver comparison (via checkForUpdate behavior)', () => {
     // minus one on the minor when possible.
     mockRelease('v' + [MAJ, Math.max(0, MIN - 1), 0].join('.'))
     expect((await checkForUpdate()).hasUpdate).toBe(false)
+  })
+})
+
+describe('a fork build number', () => {
+  it('orders fork builds after their upstream version and before the next one', () => {
+    expect(compareSemver('1.3.8-fork.1', '1.3.8')).toBe(1)
+    expect(compareSemver('1.3.8', '1.3.8-fork.1')).toBe(-1)
+    expect(compareSemver('v1.3.8-fork.10', '1.3.8-fork.9')).toBe(1)
+    expect(compareSemver('1.3.8-fork.4', 'v1.3.8-fork.4')).toBe(0)
+    expect(compareSemver('1.3.9', '1.3.8-fork.40')).toBe(1)
+  })
+
+  it('still ignores any other suffix, as before', () => {
+    expect(compareSemver('1.4.0-rc.1', '1.4.0')).toBe(0)
+  })
+})
+
+// A fork that signs its own APK asks its own GitHub repository, never upstream's GitLab.
+describe('checkForUpdate from a GitHub repository', () => {
+  let originalFetch
+  beforeEach(() => { originalFetch = globalThis.fetch; resetUpdateCheck(); vi.stubEnv('VITE_UPDATE_GITHUB_REPO', 'someone/open-gym') })
+  afterEach(() => { globalThis.fetch = originalFetch; vi.unstubAllEnvs() })
+
+  const APK_SHA = '955a70e8a55a8540bbdc3071634bffff7048ef461028ea225c892a5d9b17796d'
+  // The shape api.github.com returns for GET /repos/{repo}/releases/latest (trimmed).
+  const release = tag => ({
+    tag_name: tag,
+    assets: [
+      { name: 'openGym-x.apk.sha256', browser_download_url: 'https://github.com/someone/open-gym/releases/download/' + tag + '/openGym-x.apk.sha256', digest: 'sha256:' + '0'.repeat(64) },
+      { name: 'openGym-x.apk', browser_download_url: 'https://github.com/someone/open-gym/releases/download/' + tag + '/openGym-x.apk', digest: 'sha256:' + APK_SHA.toUpperCase() },
+    ],
+  })
+  function mockFetch(body, status = 200) {
+    globalThis.fetch = vi.fn(() => Promise.resolve({ ok: status >= 200 && status < 300, status, json: () => Promise.resolve(body) }))
+  }
+
+  it('asks that repository for its latest release', async () => {
+    mockFetch(release('v99.0.0-fork.1'))
+    await checkForUpdate()
+    expect(globalThis.fetch).toHaveBeenCalledWith('https://api.github.com/repos/someone/open-gym/releases/latest')
+  })
+
+  it('finds the APK, its checksum file, and the SHA-256 GitHub states for it', async () => {
+    mockFetch(release('v99.0.0-fork.1'))
+    const result = await checkForUpdate()
+    expect(result.hasUpdate).toBe(true)
+    expect(result.latestVersion).toBe('99.0.0-fork.1')
+    expect(result.apkUrl).toBe('https://github.com/someone/open-gym/releases/download/v99.0.0-fork.1/openGym-x.apk')
+    expect(result.hashUrl).toBe('https://github.com/someone/open-gym/releases/download/v99.0.0-fork.1/openGym-x.apk.sha256')
+    expect(result.sha256).toBe(APK_SHA)
+  })
+
+  it('offers the next fork build of the version already installed', async () => {
+    mockFetch(release('v' + __APP_VERSION__ + '-fork.1'))
+    expect((await checkForUpdate()).hasUpdate).toBe(true)
+  })
+
+  it('reports no update from a repository that has no release yet', async () => {
+    mockFetch({ message: 'Not Found' }, 404)
+    const result = await checkForUpdate()
+    expect(result).toEqual({ hasUpdate: false, latestVersion: __APP_VERSION__, apkUrl: null, hashUrl: null, sha256: null })
+  })
+
+  it('leaves the checksum to the .sha256 file when GitHub states none', async () => {
+    const r = release('v99.0.0')
+    delete r.assets[1].digest
+    mockFetch(r)
+    expect((await checkForUpdate()).sha256).toBe(null)
+  })
+
+  it('throws on any other error, so the manual check can say so', async () => {
+    mockFetch({}, 403)
+    await expect(checkForUpdate()).rejects.toThrow('GitHub API 403')
+  })
+
+  it('sends people to that repository for the releases page', () => {
+    expect(releasesPage()).toBe('https://github.com/someone/open-gym/releases')
+    vi.unstubAllEnvs()
+    expect(releasesPage()).toBe('https://gitlab.com/DuarteSantos8/opengym/-/releases')
   })
 })

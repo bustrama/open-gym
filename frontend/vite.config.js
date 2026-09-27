@@ -48,8 +48,9 @@ const swStamp = {
 
 // The version people are asked for in #install-help and on every bug report. Read from
 // package.json so it cannot drift from the release it was built in, and inlined at build
-// time so no runtime fetch is involved.
-const pkgVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+// time so no runtime fetch is involved. A fork's APK build stamps its own on top
+// (APP_VERSION=1.3.8-fork.4, see .github/workflows/android-apk.yml).
+const pkgVersion = process.env.APP_VERSION || JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
 
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(pkgVersion) },

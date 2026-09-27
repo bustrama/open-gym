@@ -4,20 +4,42 @@
 // The GitLab releases API is public for this project, so no token is needed.
 // On Android (Capacitor), the APK asset is downloaded to the cache directory
 // and handed to the system installer via a content:// URI.
+//
+// A fork that signs its own APK builds with VITE_UPDATE_GITHUB_REPO=<owner>/<repo> and is
+// offered that GitHub repository's latest release instead. It must never be offered the
+// upstream APK: Android refuses to install one key's APK over another's.
 
 import { MOBILE } from './mobile.js'
 
 const GITLAB_PROJECT_ID = 'DuarteSantos8%2Fopengym'
 const RELEASES_URL = `https://gitlab.com/api/v4/projects/${GITLAB_PROJECT_ID}/releases`
 
+// Read on every call rather than at import, so a test can switch it.
+function githubRepo() {
+  const repo = (import.meta.env || {}).VITE_UPDATE_GITHUB_REPO
+  return /^[\w.-]+\/[\w.-]+$/.test(repo || '') ? repo : null
+}
+
+// Where a person is sent when there is no APK to install from the app.
+export function releasesPage() {
+  const repo = githubRepo()
+  return repo ? `https://github.com/${repo}/releases` : 'https://gitlab.com/DuarteSantos8/opengym/-/releases'
+}
+
 /**
  * Compares two semver strings (e.g. "1.2.11" vs "1.3.0").
  * Returns  1 if a > b, -1 if a < b, 0 if equal.
+ * A fork's build of an upstream version, "1.3.8-fork.4", counts as 1.3.8.4: newer than 1.3.8
+ * and than fork.3, older than 1.3.9.
  */
-function compareSemver(a, b) {
-  const pa = a.replace(/^v/, '').split('.').map(Number)
-  const pb = b.replace(/^v/, '').split('.').map(Number)
-  for (let i = 0; i < 3; i++) {
+export function compareSemver(a, b) {
+  const parts = v => {
+    const [core, fork] = v.replace(/^v/, '').split(/-fork\./)
+    return [...core.split('.').slice(0, 3), fork].map(n => Number(n) || 0)
+  }
+  const pa = parts(a)
+  const pb = parts(b)
+  for (let i = 0; i < 4; i++) {
     const diff = (pa[i] || 0) - (pb[i] || 0)
     if (diff > 0) return 1
     if (diff < 0) return -1
@@ -32,6 +54,7 @@ function compareSemver(a, b) {
  *   - latestVersion: the semver string of the latest release (without "v" prefix)
  *   - apkUrl: direct download URL of the first .apk asset, or null
  *   - hashUrl: direct download URL of the .apk.sha256 hash file, or null
+ *   - sha256: the APK's SHA-256 when the release API states it (GitHub does), or null
  */
 // One request per app session: Settings is opened often, gitlab.com does not need to hear
 // about it every time. The promise is cached, a failure is not.
@@ -42,6 +65,8 @@ export async function checkForUpdate() {
   return cached
 }
 async function fetchLatest() {
+  const repo = githubRepo()
+  if (repo) return fetchLatestGitHub(repo)
   const res = await fetch(RELEASES_URL + '?per_page=1')
   if (!res.ok) throw new Error(`GitLab API ${res.status}`)
   const releases = await res.json()
@@ -62,7 +87,29 @@ async function fetchLatest() {
     if (hashLink) hashUrl = hashLink.direct_asset_url || hashLink.url
   }
 
-  return { hasUpdate, latestVersion, apkUrl, hashUrl }
+  return { hasUpdate, latestVersion, apkUrl, hashUrl, sha256: null }
+}
+
+async function fetchLatestGitHub(repo) {
+  const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`)
+  // A repository with no release yet answers 404.
+  if (res.status === 404) return { hasUpdate: false, latestVersion: __APP_VERSION__, apkUrl: null, hashUrl: null, sha256: null }
+  if (!res.ok) throw new Error(`GitHub API ${res.status}`)
+  const latest = await res.json()
+  const latestVersion = latest.tag_name.replace(/^v/, '')
+  const assets = latest.assets || []
+  const apk = assets.find(a => /\.apk$/i.test(a.name))
+  const hash = assets.find(a => /\.apk\.sha256$/i.test(a.name))
+  // GitHub states each asset's SHA-256 in this answer, which the WebView may read. The
+  // .sha256 file itself it may not: release downloads carry no CORS headers.
+  const digest = /^sha256:([0-9a-f]{64})$/i.exec(apk?.digest || '')
+  return {
+    hasUpdate: compareSemver(latestVersion, __APP_VERSION__) > 0,
+    latestVersion,
+    apkUrl: apk?.browser_download_url || null,
+    hashUrl: hash?.browser_download_url || null,
+    sha256: digest ? digest[1].toLowerCase() : null,
+  }
 }
 
 /**
@@ -86,31 +133,38 @@ export async function sha256(buffer) {
 export async function downloadAndInstall(url, expectedHash = null, onProgress = null) {
   if (!MOBILE) {
     // On web, just open the release page
-    window.open('https://gitlab.com/DuarteSantos8/opengym/-/releases', '_blank', 'noopener')
+    window.open(releasesPage(), '_blank', 'noopener')
     return
   }
 
   const { Filesystem, Directory } = await import('@capacitor/filesystem')
 
-  // Download with progress tracking via ReadableStream
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`Download failed: ${res.status}`)
+  let blob
+  let base64 = null
+  if (githubRepo()) {
+    ({ blob, base64 } = await downloadNative(url))
+    if (onProgress) onProgress(blob.size, blob.size)
+  } else {
+    // Download with progress tracking via ReadableStream
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`Download failed: ${res.status}`)
 
-  const total = parseInt(res.headers.get('content-length') || '0', 10)
-  const reader = res.body.getReader()
-  const chunks = []
-  let received = 0
+    const total = parseInt(res.headers.get('content-length') || '0', 10)
+    const reader = res.body.getReader()
+    const chunks = []
+    let received = 0
 
-  for (;;) {
-    const { done, value } = await reader.read()
-    if (done) break
-    chunks.push(value)
-    received += value.length
-    if (onProgress) onProgress(received, total)
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      received += value.length
+      if (onProgress) onProgress(received, total)
+    }
+
+    // Reassemble into a single blob
+    blob = new Blob(chunks)
   }
-
-  // Reassemble into a single blob
-  const blob = new Blob(chunks)
 
   // Size check: an APK should be at least 100 KB
   if (blob.size < 100_000) {
@@ -127,7 +181,7 @@ export async function downloadAndInstall(url, expectedHash = null, onProgress = 
   }
 
   // Convert blob to base64
-  const base64 = await new Promise((resolve, reject) => {
+  if (!base64) base64 = await new Promise((resolve, reject) => {
     const reader = new FileReader()
     reader.onload = () => resolve(reader.result.split(',')[1])
     reader.onerror = reject
@@ -145,4 +199,19 @@ export async function downloadAndInstall(url, expectedHash = null, onProgress = 
   const { registerPlugin } = await import('@capacitor/core')
   const Install = registerPlugin('Install')
   await Install.installApk({ fileName })
+}
+
+// GitHub's release downloads carry no CORS headers, so the WebView may not fetch() them.
+// CapacitorHttp (part of @capacitor/core) downloads from native code instead. It reports no
+// progress, and hands the file back as base64: the form writeFile takes anyway.
+async function downloadNative(url) {
+  const { CapacitorHttp } = await import('@capacitor/core')
+  const res = await CapacitorHttp.get({ url, responseType: 'blob', connectTimeout: 30000, readTimeout: 120000 })
+  if (res.status < 200 || res.status >= 300) throw new Error(`Download failed: ${res.status}`)
+  // Android breaks the base64 into lines.
+  const base64 = String(res.data || '').replace(/\s+/g, '')
+  const bin = atob(base64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return { blob: new Blob([bytes]), base64 }
 }

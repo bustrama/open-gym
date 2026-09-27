@@ -13,7 +13,7 @@ import { wakeLockSupported } from '../lib/wakelock.js'
 import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, isAndroid, shareExport, syncReminder } from '../lib/mobile.js'
-import { checkForUpdate, downloadAndInstall } from '../lib/update.js'
+import { checkForUpdate, downloadAndInstall, releasesPage } from '../lib/update.js'
 import { forgetCoach } from '../lib/coach-api.js'
 import { ConnectSheet } from './MobileOnboarding.jsx'
 import { starterPlanSheet, confirmSheet, importFromApp, importFromHevy, equipmentProfileSheet, menuSheet, askAddDeviceData } from '../sheets.jsx'
@@ -95,8 +95,9 @@ export default function Settings() {
           try {
             // The release always publishes the checksum next to the APK. Without it the file is
             // not installed — a sideloaded binary is exactly the thing that should be verified.
-            let expectedHash = null
-            if (updateInfo.hashUrl) {
+            // GitHub states it in the release itself, where the .sha256 file cannot be fetched.
+            let expectedHash = updateInfo.sha256 || null
+            if (!expectedHash && updateInfo.hashUrl) {
               try {
                 const hashRes = await fetch(updateInfo.hashUrl)
                 if (hashRes.ok) expectedHash = (await hashRes.text()).split(/\s/)[0]
@@ -115,7 +116,7 @@ export default function Settings() {
       })
     } else {
       // Update available but no APK asset — open the releases page
-      window.open('https://gitlab.com/DuarteSantos8/opengym/-/releases', '_blank', 'noopener')
+      window.open(releasesPage(), '_blank', 'noopener')
     }
   }
 
