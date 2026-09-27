@@ -1261,4 +1261,9 @@ export default {
   'Rest over': 'Pihenő vége',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Visszaszámol a zárolási képernyőn, és szól, ha vége a pihenőnek.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'A kiadásokat a github.com-on ellenőrizzük. A letöltést a telepítő megnyitása előtt az ellenőrzőösszeggel vetjük össze.',
+  'Test the rest timer': 'Pihenő időzítő kipróbálása',
+  'A 10-second rest: the countdown, then the alert.': 'Egy 10 másodperces pihenő: a visszaszámlálás, aztán a jelzés.',
+  'Test rest started: look at the status bar.': 'A próbapihenő elindult: nézd meg az állapotsort.',
+  'Rest timer notifications are turned off in Android settings.': 'A pihenő időzítő értesítései ki vannak kapcsolva az Android beállításaiban.',
+  'The rest timer could not be shown ({0}).': 'A pihenő időzítőt nem sikerült megjeleníteni ({0}).',
 }

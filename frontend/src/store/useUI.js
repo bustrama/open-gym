@@ -4,7 +4,7 @@ import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { deviceId } from '../lib/push.js'
-import { showRest, clearRest, restText } from '../lib/rest-notify.js'
+import { showRest, clearRest, restText, restProblem } from '../lib/rest-notify.js'
 import { useStore } from './useStore.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
@@ -53,10 +53,17 @@ const maybeRestNotification = async () => {
   }
 }
 
-// The phone's notifications for a rest (lib/rest-notify.js), from the store's state.
+// The phone's notifications for a rest (lib/rest-notify.js), from the store's state. With the
+// switch on and nothing showing, the user is told why, once per app session: a countdown that
+// silently never appears gets mistaken for a bug in the timer.
+let restProblemTold = false
 const phoneRest = endsAt => {
   const { S } = useStore.getState()
-  if (S.restNotify) showRest(S, { endsAt, text: restText(S.active, useUI.getState().timer?.forIdx) })
+  if (!S.restNotify) return
+  Promise.resolve(showRest(S, { endsAt, text: restText(S.active, useUI.getState().timer?.forIdx) })).then(r => {
+    const msg = restProblem(r)
+    if (msg && !restProblemTold) { restProblemTold = true; useUI.getState().toast(msg, 6000) }
+  })
 }
 // Set by the tick that finds the rest over, for the stopRest() it then calls: whether that
 // happened in front of someone, who then got the beep and needs no second alert from the phone.
@@ -92,10 +99,10 @@ export const useUI = create((set, get) => ({
   closeSheet(id) { set(s => ({ sheets: s.sheets.filter(x => x.id !== id) })) },
   closeAll() { set({ sheets: [] }) },
 
-  toast(msg) {
+  toast(msg, ms = 2200) {
     set({ toastMsg: msg })
     clearTimeout(toastTm)
-    toastTm = setTimeout(() => set({ toastMsg: '' }), 2200)
+    toastTm = setTimeout(() => set({ toastMsg: '' }), ms)
   },
 
   startRest(sec, forIdx, forSet) {

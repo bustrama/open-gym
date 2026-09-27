@@ -14,7 +14,7 @@ import { t, LANGS, INSTR_LANGS } from '../lib/i18n.js'
 import { DEMO, REPO } from '../lib/demo.js'
 import { MOBILE, isAndroid, shareExport, syncReminder } from '../lib/mobile.js'
 import { checkForUpdate, downloadAndInstall, releasesPage, updatesFromGitHub } from '../lib/update.js'
-import { allowRestNotify, clearRest } from '../lib/rest-notify.js'
+import { allowRestNotify, clearRest, testRest, restProblem } from '../lib/rest-notify.js'
 import { forgetCoach } from '../lib/coach-api.js'
 import { ConnectSheet } from './MobileOnboarding.jsx'
 import { starterPlanSheet, confirmSheet, importFromApp, importFromHevy, equipmentProfileSheet, menuSheet, askAddDeviceData } from '../sheets.jsx'
@@ -559,6 +559,17 @@ function MobileReminderCard({ S, update, toast, android }) {
     if (!on) clearRest()
     update(s => { s.restNotify = on })
   }
+  // A 10-second rest on demand: shows the countdown and the alert work on this phone (and that a
+  // watch mirroring it buzzes), or says what Android is keeping back.
+  const [testing, setTesting] = useState(false)
+  const runRestTest = async () => {
+    if (testing) return
+    setTesting(true)
+    try {
+      const r = await testRest(S)
+      toast(restProblem(r) || t('Test rest started: look at the status bar.'), 6000)
+    } finally { setTesting(false) }
+  }
   return (
     <Section title={t('Notifications')}
       footer={S.reminder?.on ? t('Reminds you at this time on days that have a routine planned.') : null}>
@@ -575,6 +586,10 @@ function MobileReminderCard({ S, update, toast, android }) {
         <Row icon="timer" iconTint="var(--acc)" title={t('Rest timer')} subtitle={t('Counts down on the lock screen, and alerts you when the rest is over.')}>
           <Switch checked={!!S.restNotify} onChange={toggleRest} />
         </Row>
+      )}
+      {android && S.restNotify && (
+        <Row icon="bell" iconTint="var(--acc)" title={t('Test the rest timer')} subtitle={t('A 10-second rest: the countdown, then the alert.')}
+          accessory="chevron" onClick={runRestTest} />
       )}
     </Section>
   )

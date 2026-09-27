@@ -1258,4 +1258,9 @@ export default {
   'Rest over': 'Repos fini',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Décompte sur l’écran de verrouillage, et une alerte quand le repos est fini.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Les versions sont vérifiées sur github.com. Le téléchargement est contrôlé avec sa somme de contrôle avant l’ouverture de l’installateur.',
+  'Test the rest timer': 'Tester le minuteur de repos',
+  'A 10-second rest: the countdown, then the alert.': 'Un repos de 10 secondes : le décompte, puis l’alerte.',
+  'Test rest started: look at the status bar.': 'Repos de test lancé : regarde la barre d’état.',
+  'Rest timer notifications are turned off in Android settings.': 'Les notifications du minuteur de repos sont désactivées dans les réglages d’Android.',
+  'The rest timer could not be shown ({0}).': 'Impossible d’afficher le minuteur de repos ({0}).',
 }

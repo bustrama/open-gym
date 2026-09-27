@@ -4,19 +4,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // the end (a local notification). Capacitor is mocked; what is pinned is what gets posted,
 // scheduled and cancelled, and in which order.
 const mocks = vi.hoisted(() => ({
-  start: vi.fn(), stop: vi.fn(),
+  start: vi.fn(), stop: vi.fn(), status: vi.fn(),
   createChannel: vi.fn(), cancel: vi.fn(), schedule: vi.fn(),
   checkPermissions: vi.fn(), requestPermissions: vi.fn(),
   android: true,
 }))
 vi.mock('./mobile.js', () => ({ MOBILE: true, isAndroid: async () => mocks.android }))
-vi.mock('@capacitor/core', () => ({ registerPlugin: () => ({ start: mocks.start, stop: mocks.stop }) }))
+vi.mock('@capacitor/core', () => ({ registerPlugin: () => ({ start: mocks.start, stop: mocks.stop, status: mocks.status }) }))
 vi.mock('@capacitor/local-notifications', () => ({ LocalNotifications: {
   createChannel: mocks.createChannel, cancel: mocks.cancel, schedule: mocks.schedule,
   checkPermissions: mocks.checkPermissions, requestPermissions: mocks.requestPermissions,
 } }))
 
-import { showRest, clearRest, restText, allowRestNotify, REST_ALERT_ID } from './rest-notify.js'
+import { showRest, clearRest, restText, allowRestNotify, restProblem, testRest, REST_ALERT_ID } from './rest-notify.js'
 
 const ON = { restNotify: true }
 const ENDS = Date.UTC(2026, 8, 27, 18, 0, 0)
@@ -64,9 +64,84 @@ describe('showRest', () => {
     expect(mocks.createChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'rest-over', importance: 5, vibration: true }))
   })
 
-  it('never lets a failing plugin reach the workout', async () => {
+  it('answers with what the plugin says', async () => {
+    mocks.start.mockResolvedValue({ shown: true })
+    expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: true })
+    mocks.start.mockResolvedValue({ shown: false, reason: 'notifications-off' })
+    expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: false, reason: 'notifications-off' })
+  })
+
+  it('answers null where nothing ran', async () => {
+    expect(await showRest({ restNotify: false }, { endsAt: ENDS })).toBeNull()
+    mocks.android = false
+    expect(await showRest(ON, { endsAt: ENDS })).toBeNull()
+  })
+
+  it('never lets a failing plugin reach the workout, yet says what failed', async () => {
     mocks.start.mockRejectedValue(new Error('not implemented'))
-    await expect(showRest(ON, { endsAt: ENDS })).resolves.toBeUndefined()
+    await expect(showRest(ON, { endsAt: ENDS })).resolves.toEqual({ shown: false, reason: 'not implemented' })
+  })
+
+  it('still schedules the alert when the countdown fails', async () => {
+    mocks.start.mockRejectedValue(new Error('not implemented'))
+    await showRest(ON, { endsAt: ENDS })
+    expect(mocks.schedule).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports an alert that could not be scheduled', async () => {
+    mocks.start.mockResolvedValue({ shown: true })
+    mocks.schedule.mockRejectedValue(new Error('no alarm'))
+    expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: true, alertError: 'no alarm' })
+  })
+
+  it('keeps the queue going after a failure', async () => {
+    mocks.start.mockRejectedValueOnce(new Error('boom'))
+    await showRest(ON, { endsAt: ENDS })
+    await clearRest()
+    expect(mocks.stop).toHaveBeenCalled()
+  })
+})
+
+describe('restProblem', () => {
+  it('has nothing to say about a countdown that shows, a rest already over, or nothing run', () => {
+    expect(restProblem({ shown: true })).toBeNull()
+    expect(restProblem({ shown: false, reason: 'over' })).toBeNull()
+    expect(restProblem(null)).toBeNull()
+  })
+
+  it('sends the user to Android settings when notifications are off there', () => {
+    expect(restProblem({ shown: false, reason: 'notifications-off' })).toBe('Rest timer notifications are turned off in Android settings.')
+    expect(restProblem({ shown: false, reason: 'channel-off' })).toBe('Rest timer notifications are turned off in Android settings.')
+  })
+
+  it('names any other failure, the alert included', () => {
+    expect(restProblem({ shown: false, reason: 'not implemented' })).toBe('The rest timer could not be shown (not implemented).')
+    expect(restProblem({ shown: true, alertError: 'no alarm' })).toBe('The rest timer could not be shown (no alarm).')
+  })
+})
+
+describe('testRest', () => {
+  it('posts a 10-second rest even with the switch off, then asks Android what is up', async () => {
+    mocks.start.mockResolvedValue({ shown: true })
+    mocks.status.mockResolvedValue({ enabled: true, channel: 3, active: true, sdk: 36 })
+    const r = await testRest({ restNotify: false }, { settle: 0 })
+    expect(mocks.start.mock.calls[0][0].endsAt).toBeGreaterThan(Date.now() + 9000)
+    expect(mocks.schedule).toHaveBeenCalledTimes(1)
+    expect(r).toEqual({ shown: true, status: { enabled: true, channel: 3, active: true, sdk: 36 } })
+  })
+
+  it('reports a countdown that was posted but is not up', async () => {
+    mocks.start.mockResolvedValue({ shown: true })
+    mocks.status.mockResolvedValue({ enabled: true, channel: 3, active: false, sdk: 36 })
+    const r = await testRest({}, { settle: 0 })
+    expect(r.shown).toBe(false)
+    expect(r.reason).toBe('not showing: notifications on, channel 3, SDK 36')
+  })
+
+  it('passes a refusal straight on', async () => {
+    mocks.start.mockResolvedValue({ shown: false, reason: 'channel-off' })
+    expect(await testRest({}, { settle: 0 })).toEqual({ shown: false, reason: 'channel-off' })
+    expect(mocks.status).not.toHaveBeenCalled()
   })
 })
 

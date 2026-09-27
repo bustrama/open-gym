@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => {
   state.fromGitHub = false
   state.allowRestNotify = vi.fn(() => Promise.resolve(true))
   state.clearRest = vi.fn()
+  state.testRest = vi.fn(() => Promise.resolve({ shown: true, status: { active: true } }))
+  state.toast = vi.fn()
   return state
 })
 vi.mock('../store/useStore.js', () => {
@@ -36,7 +38,7 @@ vi.mock('../store/useStore.js', () => {
   return { useStore, DEF: { reminder: { time: '17:30' } }, hasData: () => false }
 })
 vi.mock('../store/useUI.js', () => {
-  const snap = () => ({ toast: vi.fn(), openSheet: vi.fn() })
+  const snap = () => ({ toast: mocks.toast, openSheet: vi.fn() })
   const useUI = selector => selector ? selector(snap()) : snap()
   useUI.getState = snap
   return { useUI }
@@ -62,6 +64,9 @@ vi.mock('../lib/update.js', () => ({
 vi.mock('../lib/rest-notify.js', () => ({
   allowRestNotify: (...a) => mocks.allowRestNotify(...a),
   clearRest: (...a) => mocks.clearRest(...a),
+  testRest: (...a) => mocks.testRest(...a),
+  // The wording is rest-notify.test.js's business; here only whether it reaches the toast.
+  restProblem: r => (r && r.shown === false ? `problem: ${r.reason}` : null),
 }))
 vi.mock('./MobileOnboarding.jsx', () => ({ ConnectSheet: () => null }))
 vi.mock('../sheets.jsx', () => ({
@@ -84,6 +89,8 @@ beforeEach(() => {
   mocks.fromGitHub = false
   mocks.allowRestNotify.mockClear()
   mocks.clearRest.mockClear()
+  mocks.testRest.mockClear()
+  mocks.toast.mockClear()
   host = document.createElement('div')
   document.body.appendChild(host)
   root = createRoot(host)
@@ -208,5 +215,32 @@ describe('Settings — rest timer notifications', () => {
     expect(mocks.allowRestNotify).not.toHaveBeenCalled()
     expect(mocks.clearRest).toHaveBeenCalledTimes(1)
     expect(mocks.S.restNotify).toBe(false)
+  })
+
+  const testRow = () => [...host.querySelectorAll('.lrow')].find(r => r.textContent.includes('Test the rest timer'))
+
+  it('offers a test rest once the switch is on', async () => {
+    mocks.MOBILE = true
+    mocks.android = true
+    await mount()
+    expect(testRow()).toBeUndefined()
+    act(() => root.unmount())
+    root = createRoot(host)
+    mocks.S.restNotify = true
+    await mount()
+    expect(testRow()).toBeTruthy()
+  })
+
+  it('the test says where to look, or what Android keeps back', async () => {
+    mocks.MOBILE = true
+    mocks.android = true
+    mocks.S.restNotify = true
+    await mount()
+    await act(async () => { testRow().click() })
+    await vi.waitFor(() => expect(mocks.toast).toHaveBeenLastCalledWith('Test rest started: look at the status bar.', 6000))
+    expect(mocks.testRest).toHaveBeenCalledWith(expect.objectContaining({ restNotify: true }))
+    mocks.testRest.mockResolvedValueOnce({ shown: false, reason: 'notifications-off' })
+    await act(async () => { testRow().click() })
+    await vi.waitFor(() => expect(mocks.toast).toHaveBeenLastCalledWith('problem: notifications-off', 6000))
   })
 })
