@@ -1269,9 +1269,12 @@ export default {
   'Rest over': 'หมดเวลาพัก',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'นับถอยหลังบนหน้าจอล็อก และแจ้งเตือนเมื่อหมดเวลาพัก',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'ตรวจสอบรุ่นจาก github.com ไฟล์ที่ดาวน์โหลดจะถูกตรวจ checksum ก่อนเปิดตัวติดตั้ง',
-  'Test the rest timer': 'ทดสอบตัวจับเวลาพัก',
+  'Rest notifications': 'การแจ้งเตือนการพัก',
+  'Test rest notifications': 'ทดสอบการแจ้งเตือนการพัก',
   'A 10-second rest: the countdown, then the alert.': 'พัก 10 วินาที: นับถอยหลัง แล้วแจ้งเตือน',
   'Test rest started: look at the status bar.': 'เริ่มการพักทดสอบแล้ว: ดูที่แถบสถานะ',
   'Rest timer notifications are turned off in Android settings.': 'การแจ้งเตือนของตัวจับเวลาพักถูกปิดอยู่ในการตั้งค่า Android',
   'The rest timer could not be shown ({0}).': 'แสดงตัวจับเวลาพักไม่ได้ ({0})',
+  '−{0}s': '−{0} วินาที',
+  '+{0}s': '+{0} วินาที',
 }

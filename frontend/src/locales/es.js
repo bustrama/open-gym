@@ -1258,9 +1258,12 @@ export default {
   'Rest over': 'Descanso terminado',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Cuenta atrás en la pantalla de bloqueo y te avisa cuando termina el descanso.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Las versiones se comprueban en github.com. La descarga se verifica con su suma de comprobación antes de abrir el instalador.',
-  'Test the rest timer': 'Probar el temporizador de descanso',
+  'Rest notifications': 'Notificaciones de descanso',
+  'Test rest notifications': 'Probar las notificaciones de descanso',
   'A 10-second rest: the countdown, then the alert.': 'Un descanso de 10 segundos: la cuenta atrás y después el aviso.',
   'Test rest started: look at the status bar.': 'Descanso de prueba iniciado: mira la barra de estado.',
   'Rest timer notifications are turned off in Android settings.': 'Las notificaciones del temporizador de descanso están desactivadas en los ajustes de Android.',
   'The rest timer could not be shown ({0}).': 'No se pudo mostrar el temporizador de descanso ({0}).',
+  '−{0}s': '−{0} s',
+  '+{0}s': '+{0} s',
 }

@@ -1029,12 +1029,20 @@ const routes = {
     // Only the two keys the push protocol needs are kept: `sub` is caller-supplied and would
     // otherwise put arbitrary fields into db.json, which every admin route reads back out.
     const keys = { p256dh: String(sub.keys.p256dh), auth: String(sub.keys.auth) };
-    const deviceId = deviceIdOf(body.deviceId);
     // An upsert: the client re-sends its subscription on every boot (lib/push.js) so a row this
     // instance lost — pruned after a dead send, a rebuilt db.json — comes back without anyone
     // touching Settings. The same endpoint sent again keeps its original `created`.
     const prev = db.subs.find(s => s.endpoint === sub.endpoint);
-    db.subs = db.subs.filter(s => s.endpoint !== sub.endpoint);
+    // When the push service rotates a subscription, the service worker registers the new one by
+    // itself (sw.js pushsubscriptionchange). It cannot read the device id, which lives in the
+    // page's localStorage, so it names the endpoint it replaces: that row goes, and its device
+    // id carries over. The same endpoint sent again without an id keeps the one it had. A row
+    // without an id matches no device, and sendPush then sent a device's rest timer to every
+    // subscription of the account.
+    const oldEndpoint = typeof body.oldEndpoint === 'string' && body.oldEndpoint !== sub.endpoint ? body.oldEndpoint : '';
+    const replaced = oldEndpoint ? db.subs.find(s => s.userId === user.id && s.endpoint === oldEndpoint) : null;
+    const deviceId = deviceIdOf(body.deviceId) || deviceIdOf(replaced?.deviceId) || deviceIdOf(prev?.deviceId);
+    db.subs = db.subs.filter(s => s.endpoint !== sub.endpoint && s !== replaced);
     // A browser holds one subscription per device, so this cap is far above real use. Without
     // it a single account could pile up endpoints without limit — every one of them a target
     // sendPush() would then contact, and a whole rewrite of db.json per addition.
@@ -1055,7 +1063,10 @@ const routes = {
     const user = readSession(req);
     if (!user) return json(res, 401, { error: 'not signed in' });
     const endpoint = new URL(req.url, 'http://x').searchParams.get('endpoint') || '';
-    json(res, 200, { subscribed: db.subs.some(s => s.userId === user.id && s.endpoint === endpoint) });
+    const row = db.subs.find(s => s.userId === user.id && s.endpoint === endpoint);
+    // The row's device id too: one the service worker registered after a rotation whose old row
+    // was already pruned has none, and the page then registers it again with its id.
+    json(res, 200, row ? { subscribed: true, deviceId: row.deviceId || null } : { subscribed: false });
   },
 
   'POST /api/push/unsubscribe': async (req, res) => {

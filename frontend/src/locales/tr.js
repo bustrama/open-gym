@@ -1258,9 +1258,12 @@ export default {
   'Rest over': 'Dinlenme bitti',
   'Counts down on the lock screen, and alerts you when the rest is over.': 'Kilit ekranında geri sayar ve dinlenme bittiğinde seni uyarır.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': 'Sürümler github.com üzerinde denetlenir. İndirme, yükleyici açılmadan önce sağlama toplamıyla doğrulanır.',
-  'Test the rest timer': 'Dinlenme sayacını dene',
+  'Rest notifications': 'Dinlenme bildirimleri',
+  'Test rest notifications': 'Dinlenme bildirimlerini dene',
   'A 10-second rest: the countdown, then the alert.': '10 saniyelik bir dinlenme: geri sayım, ardından uyarı.',
   'Test rest started: look at the status bar.': 'Deneme dinlenmesi başladı: durum çubuğuna bak.',
   'Rest timer notifications are turned off in Android settings.': 'Dinlenme sayacı bildirimleri Android ayarlarında kapalı.',
   'The rest timer could not be shown ({0}).': 'Dinlenme sayacı gösterilemedi ({0}).',
+  '−{0}s': '−{0} sn',
+  '+{0}s': '+{0} sn',
 }

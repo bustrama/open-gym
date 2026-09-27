@@ -641,6 +641,15 @@ paths:
                     A token the browser made up for itself (stored in its localStorage),
                     so rest-timer pushes can be aimed at the device that started the
                     rest. Optional; anything that is not a short token is ignored.
+                    Without one, the row keeps the id it had (same endpoint) or takes the
+                    one of the row `oldEndpoint` names.
+                oldEndpoint:
+                  type: string
+                  description: >-
+                    The endpoint this subscription replaces, sent by the service worker
+                    when the push service rotates the subscription. That row of the same
+                    account is dropped and its `deviceId` carries over: the worker cannot
+                    read the device id from localStorage. Optional.
       responses:
         '200':
           description: Stored.
@@ -667,7 +676,9 @@ paths:
         `endpoint`. The browser's `PushManager.getSubscription()` says nothing about
         the server's side — a row pruned after a dead send (404/410/403) leaves the
         browser subscribed to nowhere — so the client asks here before showing the
-        notifications switch as on, and re-registers when the answer is no.
+        notifications switch as on, and re-registers when the answer is no. It also
+        re-registers when the row's `deviceId` is not its own: the service worker
+        registers a rotated subscription without one when the old row is already gone.
       parameters:
         - in: query
           name: endpoint
@@ -682,6 +693,10 @@ paths:
                 type: object
                 properties:
                   subscribed: { type: boolean }
+                  deviceId:
+                    type: [string, 'null']
+                    description: >-
+                      Only when subscribed: the row's device id, null when it has none.
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /api/push/unsubscribe:

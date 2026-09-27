@@ -1258,9 +1258,12 @@ export default {
   'Rest over': '휴식 끝',
   'Counts down on the lock screen, and alerts you when the rest is over.': '잠금 화면에서 카운트다운하고, 휴식이 끝나면 알려 줘요.',
   'Releases are checked on github.com. The download is verified against its checksum before the installer opens.': '릴리스는 github.com에서 확인합니다. 설치 프로그램이 열리기 전에 다운로드의 체크섬을 검증합니다.',
-  'Test the rest timer': '휴식 타이머 테스트',
+  'Rest notifications': '휴식 알림',
+  'Test rest notifications': '휴식 알림 테스트',
   'A 10-second rest: the countdown, then the alert.': '10초 휴식: 카운트다운 후 알림.',
   'Test rest started: look at the status bar.': '테스트 휴식을 시작했어요: 상태 표시줄을 확인하세요.',
   'Rest timer notifications are turned off in Android settings.': 'Android 설정에서 휴식 타이머 알림이 꺼져 있어요.',
   'The rest timer could not be shown ({0}).': '휴식 타이머를 표시할 수 없었어요 ({0}).',
+  '−{0}s': '−{0}초',
+  '+{0}s': '+{0}초',
 }

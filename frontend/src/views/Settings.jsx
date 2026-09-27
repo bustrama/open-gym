@@ -583,12 +583,12 @@ function MobileReminderCard({ S, update, toast, android }) {
         </Row>
       )}
       {android && (
-        <Row icon="timer" iconTint="var(--acc)" title={t('Rest timer')} subtitle={t('Counts down on the lock screen, and alerts you when the rest is over.')}>
+        <Row icon="timer" iconTint="var(--acc)" title={t('Rest notifications')} subtitle={t('Counts down on the lock screen, and alerts you when the rest is over.')}>
           <Switch checked={!!S.restNotify} onChange={toggleRest} />
         </Row>
       )}
       {android && S.restNotify && (
-        <Row icon="bell" iconTint="var(--acc)" title={t('Test the rest timer')} subtitle={t('A 10-second rest: the countdown, then the alert.')}
+        <Row icon="bell" iconTint="var(--acc)" title={t('Test rest notifications')} subtitle={t('A 10-second rest: the countdown, then the alert.')}
           accessory="chevron" onClick={runRestTest} />
       )}
     </Section>

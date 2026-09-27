@@ -4,7 +4,8 @@ import { beep, vibrate } from '../lib/sound.js'
 import { api } from '../lib/api.js'
 import { t } from '../lib/i18n.js'
 import { deviceId } from '../lib/push.js'
-import { showRest, clearRest, restText, restProblem } from '../lib/rest-notify.js'
+import { showRest, clearRest, restText, restProblem, onRestChange } from '../lib/rest-notify.js'
+import { restAfterPhone } from '../lib/rest-timing.js'
 import { useStore } from './useStore.js'
 
 // Fire-and-forget: lets the server push a "rest over" alert if this tab gets suspended
@@ -53,14 +54,15 @@ const maybeRestNotification = async () => {
   }
 }
 
-// The phone's notifications for a rest (lib/rest-notify.js), from the store's state. With the
-// switch on and nothing showing, the user is told why, once per app session: a countdown that
-// silently never appears gets mistaken for a bug in the timer.
+// The phone's notifications for the rest running now (lib/rest-notify.js), from the store's
+// state. With the switch on and nothing showing, the user is told why, once per app session: a
+// countdown that silently never appears gets mistaken for a bug in the timer.
 let restProblemTold = false
-const phoneRest = endsAt => {
+const phoneRest = () => {
   const { S } = useStore.getState()
-  if (!S.restNotify) return
-  Promise.resolve(showRest(S, { endsAt, text: restText(S.active, useUI.getState().timer?.forIdx) })).then(r => {
+  const tm = useUI.getState().timer
+  if (!S.restNotify || !tm) return
+  Promise.resolve(showRest(S, { endsAt: tm.endsAt, key: tm.key, text: restText(S.active, tm.forIdx) })).then(r => {
     const msg = restProblem(r)
     if (msg && !restProblemTold) { restProblemTold = true; useUI.getState().toast(msg, 6000) }
   })
@@ -79,9 +81,10 @@ let workDone = null
 export const useUI = create((set, get) => ({
   sheets: [],          // { id, render:(close)=>JSX, kind:'sheet'|'center', locked }
   toastMsg: '',
-  timer: null,         // rest countdown between sets — { left, total, endsAt, forIdx, forSet }
+  timer: null,         // rest countdown between sets — { left, total, endsAt, forIdx, forSet, key }
                        // forIdx: index of the active entry whose set started the rest (undefined when unknown)
                        // forSet: that set's row index in the entry — un-ticking it ends the rest (lib/supersetFlow.js untickEndsRest)
+                       // key: this rest's own id, which the phone notification's buttons report back (restFromPhone)
   work: null,          // work countdown DURING a timed set (issue #16) — { left, total, endsAt, label }
   timerFlashId: 0,     // changing the id retriggers the theme-blink visual alert
 
@@ -111,16 +114,17 @@ export const useUI = create((set, get) => ({
     // keeps every caller honest: the four places that start a rest do not each need to know.
     if (!(sec > 0)) return
     const endsAt = Date.now() + sec * 1000
-    set({ timer: { left: sec, total: sec, endsAt, forIdx, forSet } })
+    set({ timer: { left: sec, total: sec, endsAt, forIdx, forSet, key: uid() } })
     pushRestTimer(sec)
-    phoneRest(endsAt)
+    phoneRest()
     timerTick = () => {
       const tm = get().timer
       if (!tm) return
       const left = Math.max(0, Math.round((tm.endsAt - Date.now()) / 1000))
       const seenLive = !document.hidden && pageHiddenAt === null
       if (!document.hidden) pageHiddenAt = null
-      if (left === tm.left) return
+      // A timer already at 0 is one whose end the phone moved into the past (restFromPhone).
+      if (left === tm.left && left > 0) return
       const snd = useStore.getState().S.sound
       if (left <= 0) {
         if (seenLive) {
@@ -149,7 +153,20 @@ export const useUI = create((set, get) => ({
     if (left <= 0) { get().stopRest(); return }
     set({ timer: { ...tm, left, total: tm.total + sec, endsAt: tm.endsAt + sec * 1000 } })
     pushRestTimer(left)
-    phoneRest(tm.endsAt + sec * 1000)
+    phoneRest()
+  },
+  // A button on the phone's countdown notification (−15s, +15s, Skip) changed the rest, maybe
+  // while the app was in the background. The phone has already moved its countdown and alert,
+  // so nothing goes back to it; the server's push timer follows as it does for the rest bar.
+  restFromPhone(change) {
+    const next = restAfterPhone(get().timer, change, Date.now())
+    if (next === undefined) return
+    if (next === null) { get().stopRest(); return }
+    set({ timer: next })
+    if (next.left > 0) pushRestTimer(next.left)
+    // Heard after its own end (the app was asleep): the tick ends it now, loud only in front of
+    // someone, as it ends any rest.
+    else if (timerTick) timerTick()
   },
   // The active list changed shape (an exercise removed or inserted at `at`): keep the rest
   // pointing at the same exercise. Returns nothing; the caller decides whether to stop instead.
@@ -234,3 +251,5 @@ export const useUI = create((set, get) => ({
     set({ work: null })
   }
 }))
+
+onRestChange(change => useUI.getState().restFromPhone(change))

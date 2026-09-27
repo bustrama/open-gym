@@ -1,22 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// The Android app's rest notifications: the countdown (the RestTimer plugin) and the alert at
-// the end (a local notification). Capacitor is mocked; what is pinned is what gets posted,
-// scheduled and cancelled, and in which order.
+// The Android app's rest notifications: the countdown with its buttons and the alert at the end,
+// both posted by the RestTimer plugin. Capacitor is mocked; what is pinned is what gets posted
+// and cancelled, in which order, and how a tap on a button reaches the app.
 const mocks = vi.hoisted(() => ({
-  start: vi.fn(), stop: vi.fn(), status: vi.fn(),
-  createChannel: vi.fn(), cancel: vi.fn(), schedule: vi.fn(),
+  start: vi.fn(), stop: vi.fn(), status: vi.fn(), addListener: vi.fn(),
   checkPermissions: vi.fn(), requestPermissions: vi.fn(),
   android: true,
 }))
 vi.mock('./mobile.js', () => ({ MOBILE: true, isAndroid: async () => mocks.android }))
-vi.mock('@capacitor/core', () => ({ registerPlugin: () => ({ start: mocks.start, stop: mocks.stop, status: mocks.status }) }))
+vi.mock('@capacitor/core', () => ({ registerPlugin: () => ({ start: mocks.start, stop: mocks.stop, status: mocks.status, addListener: mocks.addListener }) }))
 vi.mock('@capacitor/local-notifications', () => ({ LocalNotifications: {
-  createChannel: mocks.createChannel, cancel: mocks.cancel, schedule: mocks.schedule,
   checkPermissions: mocks.checkPermissions, requestPermissions: mocks.requestPermissions,
 } }))
 
-import { showRest, clearRest, restText, allowRestNotify, restProblem, testRest, REST_ALERT_ID } from './rest-notify.js'
+import { showRest, clearRest, restText, allowRestNotify, restProblem, testRest } from './rest-notify.js'
 
 const ON = { restNotify: true }
 const ENDS = Date.UTC(2026, 8, 27, 18, 0, 0)
@@ -31,7 +29,6 @@ describe('showRest', () => {
     await showRest({ restNotify: false }, { endsAt: ENDS })
     await showRest(undefined, { endsAt: ENDS })
     expect(mocks.start).not.toHaveBeenCalled()
-    expect(mocks.schedule).not.toHaveBeenCalled()
   })
 
   it('does nothing off Android', async () => {
@@ -40,28 +37,20 @@ describe('showRest', () => {
     expect(mocks.start).not.toHaveBeenCalled()
   })
 
-  it('posts the countdown and schedules the alert for the end of the rest', async () => {
-    await showRest(ON, { endsAt: ENDS, text: 'Bench Press' })
-    expect(mocks.start).toHaveBeenCalledWith({ endsAt: ENDS, title: 'Rest', text: 'Bench Press', channelName: 'Rest timer' })
-    const [{ notifications: [alert] }] = mocks.schedule.mock.calls[0]
-    expect(alert).toMatchObject({ id: REST_ALERT_ID, title: 'Rest over — next set!', body: 'Bench Press', channelId: 'rest-over', smallIcon: 'ic_stat_opengym' })
-    expect(alert.schedule).toEqual({ at: new Date(ENDS), allowWhileIdle: true })
+  it('posts the countdown, its buttons and the alert at the end, all in the app language', async () => {
+    await showRest(ON, { endsAt: ENDS, text: 'Bench Press', key: 'r1' })
+    expect(mocks.start).toHaveBeenCalledWith({
+      key: 'r1', endsAt: ENDS, title: 'Rest', text: 'Bench Press', channelName: 'Rest timer',
+      alertTitle: 'Rest over — next set!', alertText: 'Bench Press', alertChannelName: 'Rest over',
+      step: 15, lessLabel: '−15s', moreLabel: '+15s', skipLabel: 'Skip',
+    })
   })
 
-  it('replaces the alert when the rest changes', async () => {
-    await showRest(ON, { endsAt: ENDS })
-    await showRest(ON, { endsAt: ENDS + 15000 })
-    expect(mocks.cancel).toHaveBeenCalledWith({ notifications: [{ id: REST_ALERT_ID }] })
-    expect(mocks.schedule.mock.calls[1][0].notifications[0].schedule.at).toEqual(new Date(ENDS + 15000))
-  })
-
-  it('creates the alert channel, one that sounds and vibrates, once', async () => {
-    vi.resetModules()
-    const fresh = await import('./rest-notify.js')
-    await fresh.showRest(ON, { endsAt: ENDS })
-    await fresh.showRest(ON, { endsAt: ENDS + 15000 })
-    expect(mocks.createChannel).toHaveBeenCalledTimes(1)
-    expect(mocks.createChannel).toHaveBeenCalledWith(expect.objectContaining({ id: 'rest-over', importance: 5, vibration: true }))
+  it('posts again when the rest changes: the plugin replaces countdown and alert', async () => {
+    await showRest(ON, { endsAt: ENDS, key: 'r1' })
+    await showRest(ON, { endsAt: ENDS + 15000, key: 'r1' })
+    expect(mocks.start).toHaveBeenCalledTimes(2)
+    expect(mocks.start.mock.calls[1][0]).toMatchObject({ key: 'r1', endsAt: ENDS + 15000 })
   })
 
   it('answers with what the plugin says', async () => {
@@ -69,6 +58,8 @@ describe('showRest', () => {
     expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: true })
     mocks.start.mockResolvedValue({ shown: false, reason: 'notifications-off' })
     expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: false, reason: 'notifications-off' })
+    mocks.start.mockResolvedValue({ shown: true, alertError: 'no alarm' })
+    expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: true, alertError: 'no alarm' })
   })
 
   it('answers null where nothing ran', async () => {
@@ -82,23 +73,41 @@ describe('showRest', () => {
     await expect(showRest(ON, { endsAt: ENDS })).resolves.toEqual({ shown: false, reason: 'not implemented' })
   })
 
-  it('still schedules the alert when the countdown fails', async () => {
-    mocks.start.mockRejectedValue(new Error('not implemented'))
-    await showRest(ON, { endsAt: ENDS })
-    expect(mocks.schedule).toHaveBeenCalledTimes(1)
-  })
-
-  it('reports an alert that could not be scheduled', async () => {
-    mocks.start.mockResolvedValue({ shown: true })
-    mocks.schedule.mockRejectedValue(new Error('no alarm'))
-    expect(await showRest(ON, { endsAt: ENDS })).toEqual({ shown: true, alertError: 'no alarm' })
-  })
-
   it('keeps the queue going after a failure', async () => {
     mocks.start.mockRejectedValueOnce(new Error('boom'))
     await showRest(ON, { endsAt: ENDS })
     await clearRest()
     expect(mocks.stop).toHaveBeenCalled()
+  })
+})
+
+describe('the countdown buttons', () => {
+  it('reach the app through onRestChange, from one listener however many calls race to add it', async () => {
+    vi.resetModules()
+    const fresh = await import('./rest-notify.js')
+    const heard = vi.fn()
+    fresh.onRestChange(heard)
+    await Promise.all([fresh.showRest(ON, { endsAt: ENDS }), fresh.showRest(ON, { endsAt: ENDS + 15000 }), fresh.clearRest(), fresh.allowRestNotify()])
+    expect(mocks.addListener).toHaveBeenCalledTimes(1)
+    const [event, relay] = mocks.addListener.mock.calls[0]
+    expect(event).toBe('restChange')
+    relay({ key: 'r1', skipped: true })
+    expect(heard).toHaveBeenCalledWith({ key: 'r1', skipped: true })
+  })
+
+  it('go nowhere, quietly, before anyone listens', async () => {
+    vi.resetModules()
+    const fresh = await import('./rest-notify.js')
+    await fresh.showRest(ON, { endsAt: ENDS })
+    expect(() => mocks.addListener.mock.calls[0][1]({ key: 'r1', skipped: true })).not.toThrow()
+  })
+
+  it('cannot take the rest down when their listener cannot be added', async () => {
+    vi.resetModules()
+    mocks.addListener.mockRejectedValue(new Error('no events'))
+    mocks.start.mockResolvedValue({ shown: true })
+    const fresh = await import('./rest-notify.js')
+    expect(await fresh.showRest(ON, { endsAt: ENDS })).toEqual({ shown: true })
   })
 })
 
@@ -126,7 +135,6 @@ describe('testRest', () => {
     mocks.status.mockResolvedValue({ enabled: true, channel: 3, active: true, sdk: 36 })
     const r = await testRest({ restNotify: false }, { settle: 0 })
     expect(mocks.start.mock.calls[0][0].endsAt).toBeGreaterThan(Date.now() + 9000)
-    expect(mocks.schedule).toHaveBeenCalledTimes(1)
     expect(r).toEqual({ shown: true, status: { enabled: true, channel: 3, active: true, sdk: 36 } })
   })
 
@@ -148,14 +156,12 @@ describe('testRest', () => {
 describe('clearRest', () => {
   it('removes the countdown and cancels the alert', async () => {
     await clearRest()
-    expect(mocks.stop).toHaveBeenCalled()
-    expect(mocks.cancel).toHaveBeenCalledWith({ notifications: [{ id: REST_ALERT_ID }] })
+    expect(mocks.stop).toHaveBeenCalledWith({ keepAlert: false })
   })
 
   it('keeps the alert for a rest that ran out unwatched', async () => {
     await clearRest({ keepAlert: true })
-    expect(mocks.stop).toHaveBeenCalled()
-    expect(mocks.cancel).not.toHaveBeenCalled()
+    expect(mocks.stop).toHaveBeenCalledWith({ keepAlert: true })
   })
 
   it('runs after a rest still being posted, so a skip never leaves its alert behind', async () => {
@@ -164,10 +170,10 @@ describe('clearRest', () => {
     const shown = showRest(ON, { endsAt: ENDS })
     const cleared = clearRest()
     await vi.waitFor(() => expect(release).toBeTypeOf('function'))
+    expect(mocks.stop).not.toHaveBeenCalled()
     release({})
     await Promise.all([shown, cleared])
-    const lastCancel = Math.max(...mocks.cancel.mock.invocationCallOrder)
-    expect(lastCancel).toBeGreaterThan(mocks.schedule.mock.invocationCallOrder[0])
+    expect(mocks.stop.mock.invocationCallOrder[0]).toBeGreaterThan(mocks.start.mock.invocationCallOrder[0])
   })
 })
 

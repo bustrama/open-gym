@@ -65,7 +65,10 @@ export async function disablePush() {
    while nothing was ever going to arrive. Resolves to whether the server now holds it:
    - no permission or no subscription here → false, nothing to do;
    - the server already has this endpoint → true, no write;
-   - the server lost it → re-registered, true;
+   - the server lost it, or holds it without this browser's device id → re-registered, true.
+     The service worker registers a rotated subscription by itself (sw.js), without the id,
+     which lives in localStorage; the server carries it over from the old row when it still
+     has that row, and this puts it back when it did not;
    - the server's key changed → the old subscription is useless; unsubscribe, subscribe against
      the new key, register, true.
    Network failures propagate — the caller decides what "unknown" means for it. */
@@ -82,8 +85,10 @@ export async function syncPushSubscription() {
     await register(sub)
     return true
   }
-  const { subscribed } = await api('/api/push/status?endpoint=' + encodeURIComponent(sub.endpoint))
-  if (!subscribed) await register(sub)
+  const id = deviceId()
+  const st = await api('/api/push/status?endpoint=' + encodeURIComponent(sub.endpoint))
+  // An older server does not report the id at all: nothing to compare then.
+  if (!st.subscribed || (id && 'deviceId' in st && st.deviceId !== id)) await register(sub)
   return true
 }
 

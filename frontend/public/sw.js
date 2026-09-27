@@ -57,14 +57,18 @@ self.addEventListener('notificationclick', e => {
   }))
 })
 // The push service rotated the subscription (key change, expiry): subscribe again with the same
-// server key and tell the server, so the row it holds keeps pointing at this browser.
+// server key and tell the server, so the row it holds keeps pointing at this browser. The device
+// id the page sends along (lib/push.js) is in localStorage, out of a worker's reach: the old
+// endpoint goes instead, and the server carries that row's device id over to the new one.
 self.addEventListener('pushsubscriptionchange', e => {
   e.waitUntil((async () => {
     const old = e.oldSubscription || (await self.registration.pushManager.getSubscription())
     const key = e.newSubscription?.options?.applicationServerKey || old?.options?.applicationServerKey
     if (!key) return
     const sub = e.newSubscription || await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key })
-    await fetch('api/push/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) }).catch(() => {})
+    const body = { subscription: sub.toJSON() }
+    if (old?.endpoint && old.endpoint !== sub.endpoint) body.oldEndpoint = old.endpoint
+    await fetch('api/push/subscribe', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }).catch(() => {})
   })())
 })
 
