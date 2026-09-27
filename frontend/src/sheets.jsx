@@ -2142,18 +2142,64 @@ export const renameWorkoutSheet = () => ui().openSheet(close => <RenameWorkout c
    already computed via applyIntensifierPlan; an unplanned straight set can still grow one live
    by tapping "+ Drop"/"+ Burst", which appends with the same suggested-next-value math. */
 
-// Shown when the last exercise's last set is checked — finish, or keep going.
-function WorkoutComplete({ close }) {
-  return <div style={{ textAlign: 'center', padding: '8px 0' }}>
-    <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="checkCircle" /></div>
-    <h3 style={{ margin: '8px 0' }}>{t("That's the whole workout!")}</h3>
-    <div className="muted small" style={{ marginBottom: 16 }}>{t('Every exercise done — great work. Finish up, or keep going and add another exercise.')}</div>
-    <Button variant="primary" icon="flag" onClick={() => { close(); finishWorkout() }}>{t('Finish workout')}</Button>
+/* The last stop before a session is filed. It carries the session note, prefilled with anything
+   written during the workout, so "how did it go" is asked at the moment you know the answer
+   instead of living behind a button you have to remember. Three ways in, one sheet:
+     · complete — the last set of the last exercise was just ticked (Workout.toggle)
+     · nothing ticked yet, or sets still open — Finish pressed early, with the count
+     · everything ticked — Finish pressed after the fact
+   The note is kept whichever button you press: backing out to do one more set must not cost
+   you what you just wrote. */
+function FinishWorkout({ complete, close }) {
+  const noteRef = useRef(null)
+  const onNoteFocus = useSheetKeyboard(noteRef)
+  const st = useStore(s => s.S)
+  const update = useStore(s => s.update)
+  const A = st.active
+  const [note, setNote] = useState(A?.note || '')
+  const latest = useRef(note)
+  latest.current = note
+  const kept = useRef(false)
+  const keepNote = () => {
+    if (kept.current) return
+    kept.current = true
+    const text = latest.current.trim().slice(0, NOTE_MAX)
+    update(s => { if (!s.active) return; if (text) s.active.note = text; else delete s.active.note })
+  }
+  // Swiped away or tapped outside: that is not "throw my note away" either. Re-armed on mount so
+  // StrictMode's mount → unmount → mount in development does not spend the one save.
+  useEffect(() => { kept.current = false; return keepNote }, [])
+  useEffect(() => { if (!A) close() }, [!A])
+  if (!A) return null
+
+  const done = setsDoneActive(A)
+  const open = setUnitsTotal(A.entries) - done
+  const finish = () => { keepNote(); close(); doFinishWorkout() }
+  const keepGoing = () => {
+    keepNote(); close()
+    if (complete) useUI.getState().toast(t('Keep going — tap “+ Add exercise” below'))
+  }
+  const [title, message] = complete
+    ? [t("That's the whole workout!"), t('Every exercise done — great work. Finish up, or keep going and add another exercise.')]
+    : !done ? [t('Nothing logged yet'), t('You haven’t checked off any sets. Finish the workout anyway?')]
+      : open > 0 ? [t('Finish early?'), t(open === 1 ? '{0} set still unchecked. Finish the workout now?' : '{0} sets still unchecked. Finish the workout now?', open)]
+        : [t('Finish workout'), null]
+
+  return <>
+    {complete && <div style={{ fontSize: 44, display: 'flex', justifyContent: 'center', color: 'var(--acc)' }}><Icon name="checkCircle" /></div>}
+    <h3 style={{ marginBottom: 8, textAlign: complete ? 'center' : undefined }}>{title}</h3>
+    {message && <div className="muted small" style={{ marginBottom: 14, lineHeight: 1.5 }}>{message}</div>}
+    <div className="small muted" style={{ marginBottom: 6 }}>{t('Session note')}</div>
+    <textarea ref={noteRef} className="input" rows={3} maxLength={NOTE_MAX} value={note}
+      placeholder={t('How the session went as a whole.')}
+      onFocus={onNoteFocus} onChange={e => setNote(e.target.value)} />
+    <div style={{ height: 18 }} />
+    <Button variant="primary" icon="flag" onClick={finish}>{done ? t('Finish workout') : t('Finish anyway')}</Button>
     <div style={{ height: 8 }} />
-    <Button onClick={() => { close(); useUI.getState().toast(t('Keep going — tap “+ Add exercise” below')) }}>{t('Continue workout')}</Button>
-  </div>
+    <Button variant="ghost" className="dim" onClick={keepGoing}>{t('Continue workout')}</Button>
+  </>
 }
-export const workoutCompleteSheet = () => ui().openSheet(close => <WorkoutComplete close={close} />, { kind: 'center' })
+export const workoutCompleteSheet = () => ui().openSheet(close => <FinishWorkout complete close={close} />)
 
 function FinishSummary({ w, prs, e1prs = [], close }) {
   const st = useStore(s => s.S)
@@ -2177,13 +2223,8 @@ function FinishSummary({ w, prs, e1prs = [], close }) {
   </div>
 }
 export function finishWorkout() {
-  const A = S().active
-  if (!A) return
-  const done = setsDoneActive(A)
-  const total = setUnitsTotal(A.entries)
-  if (!done) { confirmSheet({ title: t('Nothing logged yet'), message: t('You haven’t checked off any sets. Finish the workout anyway?'), confirmText: t('Finish anyway'), onConfirm: doFinishWorkout }); return }
-  if (done < total) { confirmSheet({ title: t('Finish early?'), message: t(total - done === 1 ? '{0} set still unchecked. Finish the workout now?' : '{0} sets still unchecked. Finish the workout now?', total - done), confirmText: t('Finish workout'), onConfirm: doFinishWorkout }); return }
-  doFinishWorkout()
+  if (!S().active) return
+  ui().openSheet(close => <FinishWorkout close={close} />)
 }
 function doFinishWorkout() {
   const st = S()

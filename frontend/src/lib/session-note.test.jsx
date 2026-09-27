@@ -7,7 +7,7 @@ import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { useStore } from '../store/useStore.js'
 import { useUI } from '../store/useUI.js'
-import { sessionNoteSheet, workoutDetailSheet } from '../sheets.jsx'
+import { sessionNoteSheet, workoutDetailSheet, finishWorkout, workoutCompleteSheet } from '../sheets.jsx'
 import { buildCompletedWorkout } from './finish-workout.js'
 
 const mounted = []
@@ -69,5 +69,60 @@ describe('session note', () => {
     act(() => { type(host.querySelector('textarea'), '   ') })
     unmountAll()
     expect(useStore.getState().S.workouts[0].note).toBeUndefined()
+  })
+})
+
+// The last chance to say how it went is at the finish itself, not a separate button above it.
+describe('session note at the finish', () => {
+  const active = (sets, note) => ({
+    id: 'w-fin', d: '2026-08-25', start: Date.now() - 3600_000, name: 'Push', routineIds: [],
+    entries: [{ id: 'bench', target: { mode: 'reps', reps: 5 }, sets }],
+    ...(note ? { note } : {}),
+  })
+  const button = (host, re) => [...host.querySelectorAll('button')].find(b => re.test(b.textContent))
+
+  beforeEach(() => {
+    globalThis.IS_REACT_ACT_ENVIRONMENT = true
+    useUI.setState({ sheets: [] })
+    useStore.setState(s => ({ S: { ...s.S, sound: false, workouts: [] } }))
+    document.body.innerHTML = ''
+  })
+  afterEach(() => { unmountAll(); useUI.setState({ sheets: [] }) })
+
+  it('asks for it with what was written during the workout, and files it with the workout', () => {
+    useStore.setState(s => ({ S: { ...s.S, active: active([{ w: 100, r: 5, done: true }], 'warm gym') } }))
+    const host = render(() => finishWorkout())
+    const area = host.querySelector('textarea')
+    expect(area.value).toBe('warm gym')
+    act(() => { type(area, 'warm gym, bench moved fast') })
+    act(() => { button(host, /finish workout/i).click() })
+
+    expect(useStore.getState().S.active).toBeNull()
+    expect(useStore.getState().S.workouts.at(-1).note).toBe('warm gym, bench moved fast')
+  })
+
+  it('says how many sets are still open when finishing early', () => {
+    useStore.setState(s => ({ S: { ...s.S, active: active([{ w: 100, r: 5, done: true }, { w: 100, r: 5, done: false }]) } }))
+    const host = render(() => finishWorkout())
+    expect(host.textContent).toMatch(/Finish early\?/)
+    expect(host.textContent).toMatch(/1 set still unchecked/)
+  })
+
+  it('keeps the note when you go back to training, and does not finish', () => {
+    useStore.setState(s => ({ S: { ...s.S, active: active([{ w: 100, r: 5, done: true }]) } }))
+    const host = render(() => workoutCompleteSheet())
+    act(() => { type(host.querySelector('textarea'), 'one more set of dips') })
+    act(() => { button(host, /continue workout/i).click() })
+
+    expect(useStore.getState().S.active.note).toBe('one more set of dips')
+    expect(useStore.getState().S.workouts).toHaveLength(0)
+  })
+
+  it('keeps the note when the sheet is swiped away', () => {
+    useStore.setState(s => ({ S: { ...s.S, active: active([{ w: 100, r: 5, done: true }]) } }))
+    const host = render(() => finishWorkout())
+    act(() => { type(host.querySelector('textarea'), 'short on time') })
+    unmountAll()
+    expect(useStore.getState().S.active.note).toBe('short on time')
   })
 })
