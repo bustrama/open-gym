@@ -114,6 +114,13 @@ final class RestTimer {
             return out;
         }
         save(context, rest);
+        // The last rest's alert, if it is still in the shade: stale now, and next to the
+        // countdown it would have Android bundle the two, buttons folded away.
+        try {
+            NotificationManagerCompat.from(context).cancel(ALERT_ID);
+        } catch (Exception e) {
+            // Nothing to cancel.
+        }
         String reason = post(context, rest);
         out.put("shown", reason == null);
         if (reason != null) out.put("reason", reason);
