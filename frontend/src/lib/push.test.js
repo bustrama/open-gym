@@ -7,7 +7,7 @@ vi.mock('./api.js', () => ({
   api: vi.fn(async (path, opts) => {
     calls.push([path, opts?.method || 'GET', opts?.body ? JSON.parse(opts.body) : null])
     if (path === '/api/push/public-key') return { key: KEY }
-    if (path.startsWith('/api/push/status')) return { subscribed: serverHas }
+    if (path.startsWith('/api/push/status')) return serverHas ? { subscribed: true, ...serverDevice() } : { subscribed: false }
     return { ok: true }
   })
 }))
@@ -18,6 +18,9 @@ const keyBytes = b64 => {
   return Uint8Array.from(atob(padded), c => c.charCodeAt(0)).buffer
 }
 let serverHas = true
+// What the server's row says about the device: this browser's own id unless a test says otherwise.
+const ownDevice = () => ({ deviceId: localStorage.getItem('gym_device') })
+let serverDevice = ownDevice
 let sub = null
 const makeSub = key => ({
   endpoint: 'https://push.example/e1', options: { applicationServerKey: keyBytes(key) },
@@ -34,6 +37,7 @@ const reg = {
 beforeEach(() => {
   calls.length = 0
   serverHas = true
+  serverDevice = ownDevice
   sub = null
   localStorage.clear()
   Object.defineProperty(navigator, 'serviceWorker', { value: { ready: Promise.resolve(reg) }, configurable: true })
@@ -76,6 +80,26 @@ describe('syncPushSubscription', () => {
     const post = calls.find(c => c[0] === '/api/push/subscribe')
     expect(post[2]).toEqual({ subscription: { endpoint: 'https://push.example/e1', keys: { p256dh: 'p', auth: 'a' } }, deviceId: deviceId() })
     expect(reg.pushManager.subscribe).not.toHaveBeenCalled()
+  })
+
+  it('registers again, with the device id, a row the service worker stored without one', async () => {
+    const { syncPushSubscription, deviceId } = await import('./push.js')
+    sub = makeSub(KEY)
+    serverDevice = () => ({ deviceId: null })
+    expect(await syncPushSubscription()).toBe(true)
+    expect(calls.find(c => c[0] === '/api/push/subscribe')[2].deviceId).toBe(deviceId())
+  })
+
+  it('registers again when the row holds another id, and not when the server does not say', async () => {
+    const { syncPushSubscription } = await import('./push.js')
+    sub = makeSub(KEY)
+    serverDevice = () => ({ deviceId: 'dev_someone0' })
+    await syncPushSubscription()
+    expect(calls.filter(c => c[0] === '/api/push/subscribe')).toHaveLength(1)
+    calls.length = 0
+    serverDevice = () => ({})
+    await syncPushSubscription()
+    expect(calls.filter(c => c[0] === '/api/push/subscribe')).toHaveLength(0)
   })
 
   it('replaces a subscription made against a key the server no longer has', async () => {

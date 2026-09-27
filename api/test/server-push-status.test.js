@@ -62,7 +62,7 @@ test('status tells whether the server holds the endpoint; subscribe is an upsert
   assert.deepEqual(await status(h, endpoint), { subscribed: false });
 
   assert.equal((await post(h, '/api/push/subscribe', { subscription: { endpoint, keys }, deviceId: 'dev_aaaaaaaa' })).status, 200);
-  assert.deepEqual(await status(h, endpoint), { subscribed: true });
+  assert.deepEqual(await status(h, endpoint), { subscribed: true, deviceId: 'dev_aaaaaaaa' });
   assert.deepEqual(await status(h, endpoint, other), { subscribed: false }, 'another account does not see it');
   const first = readDb(h).subs[0];
   assert.equal(first.deviceId, 'dev_aaaaaaaa');
@@ -80,6 +80,50 @@ test('status tells whether the server holds the endpoint; subscribe is an upsert
   assert.equal('deviceId' in readDb(h).subs.find(s => s.endpoint.endsWith('/two')), false);
 
   assert.equal((await fetch(`${h.api}/api/push/status?endpoint=x`)).status, 401);
+});
+
+test('a subscription the service worker rotates keeps the device id of the one it replaces', async t => {
+  const mk = (userId, endpoint, deviceId) => ({ userId, endpoint, keys, deviceId, created: new Date().toISOString() });
+  const h = await startServer(t, [
+    mk('u_test_1', 'https://push.example/old', 'dev_phone000'),
+    mk('u_test_1', 'https://push.example/desk', 'dev_desk0000'),
+    mk('u_test_2', 'https://push.example/theirs', 'dev_other000'),
+  ]);
+  const row = endpoint => readDb(h).subs.find(s => s.endpoint === endpoint);
+
+  // sw.js pushsubscriptionchange: no device id (a worker has no localStorage), the old endpoint instead
+  assert.equal((await post(h, '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/new', keys }, oldEndpoint: 'https://push.example/old' })).status, 200);
+  assert.equal(row('https://push.example/new').deviceId, 'dev_phone000');
+  assert.equal(row('https://push.example/old'), undefined, 'the replaced row is gone');
+  assert.equal(row('https://push.example/desk').deviceId, 'dev_desk0000', 'the other device is untouched');
+
+  // the same endpoint sent again without an id keeps the one it has
+  assert.equal((await post(h, '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/new', keys } })).status, 200);
+  assert.equal(row('https://push.example/new').deviceId, 'dev_phone000');
+
+  // another account's row is neither dropped nor read
+  assert.equal((await post(h, '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/mine', keys }, oldEndpoint: 'https://push.example/theirs' })).status, 200);
+  assert.equal(row('https://push.example/theirs').deviceId, 'dev_other000');
+  assert.equal('deviceId' in row('https://push.example/mine'), false);
+  // status says so, and the page then registers the row again with its id (lib/push.js)
+  assert.deepEqual(await status(h, 'https://push.example/mine'), { subscribed: true, deviceId: null });
+
+  // an id sent along wins over the one carried over
+  assert.equal((await post(h, '/api/push/subscribe', { subscription: { endpoint: 'https://push.example/newer', keys }, oldEndpoint: 'https://push.example/new', deviceId: 'dev_fresh000' })).status, 200);
+  assert.equal(row('https://push.example/newer').deviceId, 'dev_fresh000');
+  assert.equal(row('https://push.example/new'), undefined);
+});
+
+test('a rotated subscription still gets its own device\'s rest timer, and only that one', async t => {
+  // localhost resolves to a loopback address, which PUSH_AGENT refuses: a send fails quietly, and
+  // "push send failed" in the log is the proof that one was attempted.
+  const mk = (deviceId, n) => ({ userId: 'u_test_1', endpoint: `https://localhost/${n}`, keys, deviceId, created: new Date().toISOString() });
+  const h = await startServer(t, [mk('dev_phone000', 'phone-old'), mk('dev_desk0000', 'desk')]);
+  assert.equal((await post(h, '/api/push/subscribe', { subscription: { endpoint: 'https://localhost/phone-new', keys }, oldEndpoint: 'https://localhost/phone-old' })).status, 200);
+
+  assert.equal((await post(h, '/api/push/rest-timer', { seconds: 1, deviceId: 'dev_phone000' })).status, 200);
+  await new Promise(r => setTimeout(r, 2500));
+  assert.equal((h.log.match(/push send failed u_test_1/g) || []).length, 1, `one send, to the phone's new subscription:\n${h.log}`);
 });
 
 test('a rest timer belongs to the device that set it: another device cancelling does not silence it', async t => {
