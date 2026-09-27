@@ -1332,6 +1332,16 @@ describe('workout controls: the more menu and the set menu', () => {
     expect([...container.querySelectorAll('button')].some(b => b.textContent.trim() === 'Add set')).toBe(true)
   })
 
+  it('keeps a note button on every exercise header, labelled for what it will do', async () => {
+    const { exerciseNoteSheet } = await import('../sheets.jsx')
+    await mount([exercise('plain-bench', [false]), exercise('plain-row', [false], { note: 'seat 4' })], 0, { active: { workoutView: 'list' } })
+    const add = container.querySelector('button[aria-label="Add note"]')
+    expect(add).toBeTruthy()
+    expect(container.querySelector('button[aria-label="Edit note"]')).toBeTruthy()
+    await act(async () => { add.dispatchEvent(new dom.Event('click', { bubbles: true })) })
+    expect(exerciseNoteSheet).toHaveBeenCalledWith(0)
+  })
+
   it('routes swap, move, remove, warm-up and details through the More menu of that exercise', async () => {
     await mount([exercise('plain-bench', [false]), exercise('plain-row', [false])], 0)
     await act(async () => { container.querySelector('button[aria-label="More"]').dispatchEvent(new dom.Event('click', { bubbles: true })) })

@@ -370,8 +370,11 @@ function ExerciseBlock({ entryIdx, compact, dense, onToggle, onToggleSide, onFie
     <div className="row between" style={{ marginBottom: 6 }}>
       <div style={{ fontSize: (compact || dense) ? 17 : 20, fontWeight: 600, letterSpacing: '-.02em', textTransform: 'capitalize', lineHeight: 1.2 }}>{exerciseNameFor(ex)}</div>
       <div className="row" style={{ gap: 2, flex: 'none' }}>
-        {entry.note && <button className="iconbtn" aria-label={t('Note')} title={t('Note')} style={{ color: 'var(--acc)' }}
-          onClick={() => exerciseNoteSheet(entryIdx)}><Icon name="pencil" /></button>}
+        {/* Always there, so a note for this exercise is one tap away rather than behind ⋯;
+            tinted once the exercise has one. */}
+        <button className="iconbtn" aria-label={entry.note ? t('Edit note') : t('Add note')} title={entry.note ? t('Edit note') : t('Add note')}
+          style={entry.note ? { color: 'var(--acc)' } : { opacity: .55 }}
+          onClick={() => exerciseNoteSheet(entryIdx)}><Icon name="pencil" /></button>
         <button className="iconbtn" aria-label={t('More')} title={t('More')} onClick={openMore}><Icon name="more" /></button>
       </div>
     </div>
