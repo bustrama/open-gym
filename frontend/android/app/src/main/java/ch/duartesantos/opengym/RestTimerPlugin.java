@@ -106,6 +106,14 @@ public class RestTimerPlugin extends Plugin {
                     .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                     .setContentIntent(open);
             builder.getExtras().putBoolean("android.requestPromotedOngoing", true);
+            if ("samsung".equalsIgnoreCase(Build.MANUFACTURER)) {
+                // One UI shows the chip only for apps on Samsung's own list, unless the
+                // notification carries this undocumented extra (One UI 8.5 SystemUI:
+                // NotificationEntry.isAutomation). Never add android.ongoingActivityNoti.style
+                // too: it moves the notification to Samsung's private card and undoes this.
+                builder.getExtras().putBoolean("android.ongoingActivityNoti.automation", true);
+                builder.getExtras().putString("android.ongoingActivityNoti.automationPackage", context.getPackageName());
+            }
 
             manager.notify(NOTIFICATION_ID, builder.build());
             call.resolve(result(true, null));
