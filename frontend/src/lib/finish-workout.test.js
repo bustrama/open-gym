@@ -149,6 +149,39 @@ describe('session notes', () => {
   })
 })
 
+// A superset is how the exercises were done, not only how they were planned: History and the
+// MCP read it off the finished workout.
+describe('supersets on the finished workout', () => {
+  const set = done => ({ w: 50, r: 10, done })
+  const build = entries => buildCompletedWorkout({ id: 'w', d: '2026-09-27', start: 1, name: 'Legs', entries })
+
+  it('keeps the superset id of the members that were done back to back', () => {
+    const w = build([
+      { id: 'press', sets: [set(true)] },
+      { id: 'leg', sets: [set(true)], sg: 'sg-1-2' },
+      { id: 'calf', sets: [set(true)], sg: 'sg-1-2' },
+    ])
+    expect(w.entries.map(e => e.sg)).toEqual([undefined, 'sg-1-2', 'sg-1-2'])
+    expect('sg' in w.entries[0]).toBe(false)
+  })
+
+  it('drops the id when its partner had nothing done and is left out', () => {
+    const w = build([
+      { id: 'leg', sets: [set(true)], sg: 'pair' },
+      { id: 'calf', sets: [set(false)], sg: 'pair' },
+      { id: 'curl', sets: [set(true)] },
+    ])
+    expect(w.entries.map(e => e.id)).toEqual(['leg', 'curl'])
+    expect(w.entries.some(e => 'sg' in e)).toBe(false)
+  })
+
+  it('does not touch the session it was built from', () => {
+    const entries = [{ id: 'leg', sets: [set(true)], sg: 'pair' }, { id: 'calf', sets: [set(false)], sg: 'pair' }]
+    build(entries)
+    expect(entries.map(e => e.sg)).toEqual(['pair', 'pair'])
+  })
+})
+
 // finishSession / sessionPrs: the finish button's effects on the profile, now one function shared
 // with the MCP server's log_workout. These pin what doFinishWorkout did inline before it moved.
 import { finishSession, sessionPrs } from './finish-workout.js'

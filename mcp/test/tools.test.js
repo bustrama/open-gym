@@ -397,6 +397,22 @@ describe('get_workout', () => {
     ])
   })
 
+  test('labels the exercises that were done as a superset', () => {
+    S.workouts = [{
+      id: 'paired', d: '2026-09-27', start: 0, end: 1800000, name: 'Legs', vol: 0, prs: [],
+      entries: [
+        { id: 'squat', target: { mode: 'reps' }, sets: [{ w: 80, r: 5, done: true }] },
+        { id: 'bench', target: { mode: 'reps' }, sets: [{ w: 60, r: 5, done: true }], sg: 'sg-1-2' },
+        { id: 'row', target: { mode: 'reps' }, sets: [{ w: 50, r: 8, done: true }], sg: 'sg-1-2' }
+      ]
+    }]
+    _seedStateForTests(S)
+
+    const w = call('get_workout', { workout_id: 'paired' })
+    expect(w.entries.map(e => e.superset_group)).toEqual([undefined, 'sg-1-2', 'sg-1-2'])
+    expect('superset_group' in JSON.parse(JSON.stringify(w.entries[0]))).toBe(false)
+  })
+
   test('a workout without notes says so plainly', () => {
     const w = call('get_workout', { date: call('list_workouts', {}).workouts[0].date })
     expect(w.note).toBeNull()

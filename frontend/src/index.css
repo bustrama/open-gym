@@ -1315,6 +1315,8 @@ body.chips-dragging *{cursor:inherit}
 }
 .ss-label .icn{font-size:13px}
 .item.in-ss{box-shadow:inset 3px 0 0 var(--acc)}
+/* a superset in a finished workout's detail: the members share an accent edge */
+.row.ss-hist{box-shadow:inset 2px 0 0 var(--acc);padding-left:10px}
 .ss-card{
   border-radius:var(--r-lg);padding:14px;
   background:var(--surface);box-shadow:inset 0 0 0 1.5px var(--acc-line);

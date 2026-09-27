@@ -126,7 +126,7 @@ Nine read-only tools in v1:
 | `preview_session` | What will the app actually put on screen when I start this routine — after the progression policy and my history have overridden the plan? |
 | `get_week_plan` | What's on my plan this week, including today with any date-specific override? |
 | `list_workouts` | Recent sessions — newest first, with dates, sets done/planned, volume, duration, PRs, and the session note. |
-| `get_workout` | Full set-by-set breakdown of one session, by `workout_id` or by date, with the session note and each exercise's notes (this session's, whether it was pinned for next time, and its standing note). On a day with two sessions the date alone returns both ids to pick from rather than guessing at one. |
+| `get_workout` | Full set-by-set breakdown of one session, by `workout_id` or by date, with the session note and each exercise's notes (this session's, whether it was pinned for next time, and its standing note), and a shared `superset_group` on exercises done as a superset. On a day with two sessions the date alone returns both ids to pick from rather than guessing at one. |
 | `get_bodyweight` | Weigh-ins with the latest weight, the goal line, and deltas vs goal. |
 | `estimate_1rm` | All-time best 1RM for an exercise + the trend, or a PR table across all exercises. |
 | `muscle_balance` | Which muscles I've trained this week/month/all-time, ranked + which I've neglected. |

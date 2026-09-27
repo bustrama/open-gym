@@ -109,3 +109,19 @@ describe('WorkoutDetail — per-routine grouping', () => {
     expect(host.querySelectorAll('.row.between').length).toBe(0)
   })
 })
+
+describe('WorkoutDetail — supersets', () => {
+  const done = id => ({ id, target: { reps: 10 }, sets: [{ w: 40, r: 10, done: true }] })
+
+  it('marks the exercises done as a superset and labels the first of them', () => {
+    const w = {
+      id: 'w', d: '2026-09-27', start: 1, end: 2, name: 'Legs', vol: 400, prs: [],
+      entries: [done(ids[0]), { ...done(ids[1]), sg: 'pair' }, { ...done(ids[2]), sg: 'pair' }, done(ids[3])],
+    }
+    useStore.setState(s => ({ S: { ...s.S, workouts: [w] } }))
+    const host = (workoutDetailSheet(w), renderTop())
+    const rows = [...host.querySelectorAll('.row')].filter(el => el.querySelector(':scope > .grow > .tt'))
+    expect(rows.map(el => el.classList.contains('ss-hist'))).toEqual([false, true, true, false])
+    expect(rows.map(el => /Superset/.test(el.textContent))).toEqual([false, true, false, false])
+  })
+})

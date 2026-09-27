@@ -54,6 +54,8 @@ function entryView(e, S) {
     note: e.note || null,
     note_pinned: e.note ? !!e.notePin : undefined,
     standing_note: standingNote(S, e.id),
+    // Neighbours sharing a label were done back to back as a superset (get_routine's field).
+    superset_group: e.sg || undefined,
     sets: (e.sets || []).map(s => ({
       done: !!s.done,
       label: setLabel(e.id, { ...s, done: undefined }, cfg),
@@ -266,7 +268,7 @@ function plannedSets(w) {
 /** get_workout — full entry/set breakdown for one date. */
 export const getWorkout = {
   name: 'get_workout',
-  description: 'Get the full breakdown of one workout: every exercise, its mode (reps/time/cardio), the target, and per-set labels (e.g. "5 @ 60 kg", "1:30 · 20 kg"), the session note, and each exercise\'s notes: what was written about it in this session (note, note_pinned when it was pinned to show next time) and its standing note (standing_note, holds every time). Identify it by workout_id (from list_workouts) or by date. Use list_workouts first if you don\'t know either.',
+  description: 'Get the full breakdown of one workout: every exercise, its mode (reps/time/cardio), the target, and per-set labels (e.g. "5 @ 60 kg", "1:30 · 20 kg"), the session note, and each exercise\'s notes: what was written about it in this session (note, note_pinned when it was pinned to show next time) and its standing note (standing_note, holds every time). Exercises done as a superset share a superset_group label (absent otherwise). Identify it by workout_id (from list_workouts) or by date. Use list_workouts first if you don\'t know either.',
   schema: {
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('The workout date as YYYY-MM-DD. If two sessions share that date, the answer lists them instead and asks for a workout_id.'),
     workout_id: z.string().min(1).optional().describe('The id from list_workouts. Preferred: it names one session even on a day with two.')

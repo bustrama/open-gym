@@ -1693,13 +1693,20 @@ function WorkoutDetail({ w, close }) {
       if (text) rec.note = text; else delete rec.note
     })
   }, [])
+  // Exercises done as a superset (the finished entries keep their `sg`) share an accent edge,
+  // and the first of them says so.
+  const supersets = supersetUnits(w.entries).filter(u => u.length > 1)
+  const ssFirst = new Set(supersets.map(u => u[0]))
+  const inSuperset = new Set(supersets.flat())
   // A combined session's entries carry a `rid`; group them into per-routine sections in merge
   // order. A legacy single-routine workout (one routineIds, or no rid anywhere) renders flat.
   const entryRow = (e, i) => {
     const ex = EXIDX[e.id]
-    return <div key={i} className="row" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
+    return <div key={i} className={'row' + (inSuperset.has(i) ? ' ss-hist' : '')} style={{ marginBottom: 12, alignItems: 'flex-start' }}>
       {ex && <Thumb ex={ex} />}
-      <div className="grow"><div className="tt capitalize" style={{ fontWeight: 600 }}>{ex ? exerciseNameFor(ex) : (e.n || e.id)} {w.prs && w.prs.includes(e.id) && <span className="pr"><Icon name="trophy" />PR</span>}</div>
+      <div className="grow">
+        {ssFirst.has(i) && <div className="small muted row" style={{ gap: 5, marginBottom: 2 }}><Icon name="link" />{t('Superset')}</div>}
+        <div className="tt capitalize" style={{ fontWeight: 600 }}>{ex ? exerciseNameFor(ex) : (e.n || e.id)} {w.prs && w.prs.includes(e.id) && <span className="pr"><Icon name="trophy" />PR</span>}</div>
         <div className="ss">{e.sets.filter(hasCompletedWork).map(s => setLabel(e.id, s, e.target)).join('  ·  ') || t('no sets')}</div>
         {e.note && <div className="small dim" style={{ marginTop: 3 }}>
           {e.notePin && <Icon name="flag" style={{ fontSize: 12, marginRight: 4, verticalAlign: '-1px', color: 'var(--yellow)' }} />}{e.note}

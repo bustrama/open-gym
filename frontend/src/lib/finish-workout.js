@@ -1,6 +1,6 @@
 // The persisted boundary for a finished session. Keep this pure so compatibility tests can
 // exercise the exact shape the UI writes without mounting React or mutating store state.
-import { bestWeightForEntry, bestWeightFor, workoutVolume } from './history.js'
+import { bestWeightForEntry, bestWeightFor, workoutVolume, cleanupSg } from './history.js'
 import { hasCompletedWork, isWarmupRow } from './workout-model.js'
 import { betterWeight, beatsWeight } from './exercises.js'
 import { backfillEnd, completeBackfill } from './backfill.js'
@@ -58,6 +58,8 @@ export function buildCompletedWorkout(active, { end = Date.now(), prs = [], snap
       // shape it always was. Without this the whitelist drops both at finish.
       ...(entry.rid ? { rid: entry.rid } : {}),
       ...(entry.noProg === true ? { noProg: true } : {}),
+      // Done as a superset: the members share an id, as in the session and the routine.
+      ...(entry.sg ? { sg: entry.sg } : {}),
     }
     const snapshot = typeof snapshotFor === 'function' ? snapshotFor(entry) : null
     if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot) && Object.keys(snapshot).length) {
@@ -73,6 +75,8 @@ export function buildCompletedWorkout(active, { end = Date.now(), prs = [], snap
     }
     return completed
   }).filter(entry => entry.sets.some(hasCompletedWork))
+  // A member left out for having nothing done leaves its partner a group of one.
+  cleanupSg(entries)
 
   const sessionNote = (active?.note || '').trim()
   const routineIds = [].concat(active?.routineIds ?? (active?.routineId ? [active.routineId] : []))
