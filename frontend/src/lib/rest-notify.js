@@ -105,8 +105,8 @@ export function restStatus() {
 
 const statusText = st => `notifications ${st.enabled ? 'on' : 'off'}, channel ${st.channel ?? '?'}, SDK ${st.sdk ?? '?'}`
 
-// Settings' "Test the rest timer": a short rest, countdown and alert, then a look at what Android
-// actually has up. notify() posts asynchronously, hence the pause before the look.
+// Settings' "Test rest notifications": a short rest, countdown and alert, then a look at what
+// Android actually has up. notify() posts asynchronously, hence the pause before the look.
 export async function testRest(S, { seconds = 10, text = '', settle = 1000 } = {}) {
   const r = await showRest({ ...S, restNotify: true }, { endsAt: Date.now() + seconds * 1000, text })
   if (!r || r.shown === false || r.alertError) return r

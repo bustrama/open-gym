@@ -217,7 +217,7 @@ describe('Settings — rest timer notifications', () => {
     expect(mocks.S.restNotify).toBe(false)
   })
 
-  const testRow = () => [...host.querySelectorAll('.lrow')].find(r => r.textContent.includes('Test the rest timer'))
+  const testRow = () => [...host.querySelectorAll('.lrow')].find(r => r.textContent.includes('Test rest notifications'))
 
   it('offers a test rest once the switch is on', async () => {
     mocks.MOBILE = true
