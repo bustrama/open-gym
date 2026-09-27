@@ -42,6 +42,26 @@ describe('log_workout — the newest workout: live rules', () => {
     expect(h.srv.state.exWeights[bench]).toEqual({ w: 62.5, d: today() })
   })
 
+  test('notes land where the app keeps them: the session\'s, and each exercise\'s with its pin', async () => {
+    await h.call('log_workout', {
+      routine_ids: ['rPush'], note: 'felt strong',
+      entries: [
+        { exercise_id: bench, sets: benchSets(60), note: 'pause reps', note_pin: true },
+        { exercise_id: cardio, sets: [{ minutes: 10 }], note: 'incline 2' },
+      ],
+    })
+    const w = last()
+    expect(w.note).toBe('felt strong')
+    expect(w.entries[0]).toMatchObject({ note: 'pause reps', notePin: true })
+    expect(w.entries[1].note).toBe('incline 2')
+    expect(w.entries[1].notePin).toBeUndefined()
+  })
+
+  test('a note longer than the app allows is refused, not stored', async () => {
+    expect(() => h.call('log_workout', { note: 'x'.repeat(501), entries: [{ exercise_id: bench, sets: benchSets(60) }] })).toThrow(/500/)
+    expect(h.srv.state.workouts).toHaveLength(1)
+  })
+
   test('warm-ups and effort ride on the sets; a warm-up is never the record', async () => {
     const r = await h.call('log_workout', { routine_ids: ['rPush'], entries: [{ exercise_id: bench, sets: [{ weight: 100, reps: 1, warmup: true }, { weight: 60, reps: 5, rir: 2 }] }] })
     expect(r.prs).toEqual([])

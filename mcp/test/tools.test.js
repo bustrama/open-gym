@@ -108,6 +108,15 @@ describe('get_routine', () => {
     })
   })
 
+  test('shows an exercise\'s standing note beside its plan note', () => {
+    const push = S.routines[0]
+    S.exNotes = { [push.ex[0].id]: 'seat 4' }
+    _seedStateForTests(S)
+    const r = call('get_routine', { routine_id: push.id })
+    expect(r.exercises[0].standing_note).toBe('seat 4')
+    expect(r.exercises.slice(1).every(e => e.standing_note === undefined)).toBe(true)
+  })
+
   test('resolves custom exercises from the current profile state', () => {
     const custom = { id: 'cx-sled-drag', n: 'Sled drag', bp: 'upper legs' }
     S.customEx = [custom]
@@ -359,6 +368,39 @@ describe('get_workout', () => {
     expect(call('get_workout', { workout_id: 'w-morning' }).routine_name).toBe('Pull')
     // And list_workouts carries the id, or nothing above could ask for one.
     expect(call('list_workouts', {}).workouts.every(w => 'id' in w)).toBe(true)
+  })
+
+  test('carries the session note and every note on its exercises', () => {
+    // A session note, a one-off note, a pinned one, and a standing note on an exercise that
+    // has no note in this session — the three kinds the app keeps apart.
+    S.exNotes = { squat: 'rack pin 7' }
+    S.workouts = [{
+      id: 'noted', d: '2026-07-25', start: 0, end: 1800000, name: 'Noted', vol: 0, prs: [],
+      note: 'slept badly, still moved well',
+      entries: [
+        { id: 'bench', target: { mode: 'reps' }, sets: [{ w: 60, r: 5, done: true }], note: 'left shoulder twinge' },
+        { id: 'row', target: { mode: 'reps' }, sets: [{ w: 50, r: 8, done: true }], note: 'use the straps', notePin: true },
+        { id: 'squat', target: { mode: 'reps' }, sets: [{ w: 80, r: 5, done: true }] }
+      ]
+    }]
+    _seedStateForTests(S)
+
+    const listed = call('list_workouts', {}).workouts[0]
+    expect(listed).toMatchObject({ id: 'noted', note: 'slept badly, still moved well', exercise_notes: 2 })
+
+    const w = call('get_workout', { workout_id: 'noted' })
+    expect(w.note).toBe('slept badly, still moved well')
+    expect(w.entries.map(e => [e.note, e.note_pinned, e.standing_note])).toEqual([
+      ['left shoulder twinge', false, null],
+      ['use the straps', true, null],
+      [null, undefined, 'rack pin 7']
+    ])
+  })
+
+  test('a workout without notes says so plainly', () => {
+    const w = call('get_workout', { date: call('list_workouts', {}).workouts[0].date })
+    expect(w.note).toBeNull()
+    w.entries.forEach(e => expect(e.note).toBeNull())
   })
 
   test('an unknown workout_id is an error, not the wrong workout', () => {

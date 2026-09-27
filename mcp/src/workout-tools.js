@@ -11,7 +11,7 @@ import { finishSession } from '../../frontend/src/lib/finish-workout.js'
 import { buildCombinedEntries, deriveSessionName } from '../../frontend/src/lib/session-merge.js'
 import { registerCustom, isCardio, EXIDX, exOr } from '../../frontend/src/lib/exercises.js'
 import { exerciseMuscleSnapshot } from '../../frontend/src/lib/muscles.js'
-import { modeOf } from '../../frontend/src/lib/history.js'
+import { modeOf, NOTE_MAX } from '../../frontend/src/lib/history.js'
 import { uid } from '../../frontend/src/lib/format.js'
 
 const reasonSchema = z.string().max(300).optional().describe('Why — kept in the change history next to the change')
@@ -57,11 +57,12 @@ export function workoutTools(writer) {
       routine_ids: z.array(z.string().min(1)).max(5).optional().describe('The routines this session trained (their targets and progression apply). Omit for a freestyle session.'),
       name: z.string().trim().min(1).max(60).optional().describe('Default: the routines\' names, or Freestyle'),
       bodyweight: z.number().positive().max(1500).optional(),
-      note: z.string().max(1000).optional().describe('Session note'),
+      note: z.string().max(NOTE_MAX).optional().describe('Session note — how the workout went, as the athlete writes it at the finish'),
       entries: z.array(z.object({
         exercise_id: z.string().min(1),
         sets: z.array(setSchema).min(1).max(200),
-        note: z.string().max(500).optional()
+        note: z.string().max(NOTE_MAX).optional().describe('What happened with this exercise in this session'),
+        note_pin: z.boolean().optional().describe('Show this note again the next time the exercise is trained (the app\'s "Show this next time")')
       })).min(1).max(200),
       on_same_day: z.enum(['error', 'add', 'replace']).default('error').describe('When that date already has a workout: refuse (default), add a second one, or replace it'),
       replace_workout_id: z.string().optional().describe('Which workout to replace when that date has several'),
@@ -118,7 +119,7 @@ export function workoutTools(writer) {
           const mode = base.target ? modeOf({ ...base.target, id: ie.exercise_id })
             : isCardio(ie.exercise_id) ? 'cardio'
               : ie.sets.every(s => s.seconds && s.reps == null) ? 'time' : 'reps'
-          return { ...base, id: ie.exercise_id, sets: ie.sets.map((s, k) => setRow(s, mode, `${at} set ${k + 1}`)), ...(ie.note ? { note: ie.note } : {}) }
+          return { ...base, id: ie.exercise_id, sets: ie.sets.map((s, k) => setRow(s, mode, `${at} set ${k + 1}`)), ...(ie.note ? { note: ie.note, ...(ie.note_pin ? { notePin: true } : {}) } : {}) }
         })
 
         // Newest workout: live rules. Anything filed behind another one: past rules.

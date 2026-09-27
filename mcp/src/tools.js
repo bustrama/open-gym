@@ -29,6 +29,13 @@ const customOf = (id, S) => (S.customEx || []).find(ex => ex.id === id)
 // with it, callers feeding muscle resolution are NOT. Use customOf directly there.
 const exerciseOf = (id, S) => customOf(id, S) || exOr(id)
 
+// S.exNotes: { [exerciseId]: text }, set in the app's note sheet ("Always for this exercise") or
+// by set_exercise_note.
+export const standingNote = (S, id) => {
+  const note = S && S.exNotes && typeof S.exNotes === 'object' ? S.exNotes[id] : null
+  return typeof note === 'string' && note ? note : null
+}
+
 function entryView(e, S) {
   const ex = exerciseOf(e.id, S)
   // Spread id into the cfg the way every call site in the app does (Workout.jsx, Stats.jsx,
@@ -42,6 +49,11 @@ function entryView(e, S) {
     body_part: ex.bp || null,
     mode,
     target: e.target || null,
+    // What the athlete wrote about this exercise in this session, whether they pinned it to
+    // come back next time, and the standing note that holds every time (seat, pin, grip).
+    note: e.note || null,
+    note_pinned: e.note ? !!e.notePin : undefined,
+    standing_note: standingNote(S, e.id),
     sets: (e.sets || []).map(s => ({
       done: !!s.done,
       label: setLabel(e.id, { ...s, done: undefined }, cfg),
@@ -106,7 +118,7 @@ export const listRoutines = {
 /** get_routine — the full exercise list for one routine, including set/rep targets. */
 export const getRoutine = {
   name: 'get_routine',
-  description: 'Get the full exercise list for a single routine (the same view the routine editor shows). Returns mode (reps/time/cardio), set/rep/weight targets, superset links, any per-exercise custom increment or Epley deload factor, and each exercise\'s own rest in seconds (absent means it inherits the global rest timer). Use routine_id from list_routines.',
+  description: 'Get the full exercise list for a single routine (the same view the routine editor shows). Returns mode (reps/time/cardio), set/rep/weight targets, superset links, any per-exercise custom increment or Epley deload factor, and each exercise\'s own rest in seconds (absent means it inherits the global rest timer), its plan note and its standing note (standing_note: what holds every time it is trained, e.g. "seat 4"). Use routine_id from list_routines.',
   schema: { routine_id: z.string().min(1) },
   handler: ({ routine_id }) => {
     const S = getState()
@@ -153,6 +165,7 @@ export const getRoutine = {
           per_side: mode === 'reps' ? isPerSide(cfg) : undefined,
           warmup_sets: cfg.warmupSets > 0 ? cfg.warmupSets : undefined,
           note: cfg.note || undefined,
+          standing_note: standingNote(S, cfg.id) || undefined,
           intensifier: !cfg.intensifier ? undefined
             : cfg.intensifier.type === 'dropset' ? { type: 'dropset', count: cfg.intensifier.count, pct: cfg.intensifier.pct }
               : { type: cfg.intensifier.type, total_reps: cfg.intensifier.totalReps, rest_sec: cfg.intensifier.restSec },
@@ -200,7 +213,7 @@ export const getWeekPlan = {
 /** list_workouts — newest-first summary of recent sessions. */
 export const listWorkouts = {
   name: 'list_workouts',
-  description: 'List recent finished workouts, newest first. Each item summarises the date, exercise count, sets done / planned, total volume (in the user\'s unit), duration and whether PRs were set. Use this before drilling into a specific date with get_workout.',
+  description: 'List recent finished workouts, newest first. Each item summarises the date, exercise count, sets done / planned, total volume (in the user\'s unit), duration, whether PRs were set, the session note and how many exercises carry a note of their own. Use this before drilling into a specific date with get_workout.',
   schema: {
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Inclusive start date YYYY-MM-DD. Defaults to no lower bound (list most recent).'),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('Inclusive end date YYYY-MM-DD. Defaults to today.'),
@@ -236,7 +249,9 @@ export const listWorkouts = {
         duration_ms: w.end && w.start ? (w.end - w.start) : null,
         duration: w.end && w.start ? friendlyDuration(w.end - w.start) : null,
         prs: (w.prs || []).length,
-        bodyweight_at_workout: w.bw || null
+        bodyweight_at_workout: w.bw || null,
+        note: w.note || null,
+        exercise_notes: (w.entries || []).filter(e => e.note).length
       }))
     }
   }
@@ -251,7 +266,7 @@ function plannedSets(w) {
 /** get_workout — full entry/set breakdown for one date. */
 export const getWorkout = {
   name: 'get_workout',
-  description: 'Get the full breakdown of one workout: every exercise, its mode (reps/time/cardio), the target, and per-set labels (e.g. "5 @ 60 kg", "1:30 · 20 kg"). Identify it by workout_id (from list_workouts) or by date. Use list_workouts first if you don\'t know either.',
+  description: 'Get the full breakdown of one workout: every exercise, its mode (reps/time/cardio), the target, and per-set labels (e.g. "5 @ 60 kg", "1:30 · 20 kg"), the session note, and each exercise\'s notes: what was written about it in this session (note, note_pinned when it was pinned to show next time) and its standing note (standing_note, holds every time). Identify it by workout_id (from list_workouts) or by date. Use list_workouts first if you don\'t know either.',
   schema: {
     date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe('The workout date as YYYY-MM-DD. If two sessions share that date, the answer lists them instead and asks for a workout_id.'),
     workout_id: z.string().min(1).optional().describe('The id from list_workouts. Preferred: it names one session even on a day with two.')
@@ -298,6 +313,7 @@ export const getWorkout = {
       sets_done: setsDone(w),
       sets_planned: plannedSets(w),
       duration: w.end && w.start ? friendlyDuration(w.end - w.start) : null,
+      note: w.note || null,
       prs: (w.prs || []).map(id => {
         const ex = exerciseOf(id, S)
         return ex.missing ? id : ex.n
