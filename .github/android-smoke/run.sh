@@ -108,7 +108,7 @@ $PROBE '__tick()'
 sleep 2
 timer
 # Only the tick's rest has the app's key; move the phone's copy to 10 seconds from now by hand.
-$PROBE 'Capacitor.nativePromise("RestTimer", "status", {}).then(s => Capacitor.nativePromise("RestTimer", "start", { key: s.rest.key, endsAt: Date.now() + 10000, title: "Rest", step: 15, lessLabel: "−15s", moreLabel: "+15s", skipLabel: "Skip" }))'
+$PROBE 'Capacitor.nativePromise("RestTimer", "status", {}).then(s => Capacitor.nativePromise("RestTimer", "start", { key: s.rest.key, endsAt: Date.now() + 10000, title: "Rest", text: "Barbell Bench Press", step: 15, lessLabel: "−15s", moreLabel: "+15s", skipLabel: "Skip" }))'
 shade
 tap_less
 sleep 2
@@ -154,7 +154,25 @@ adb shell input keyevent KEYCODE_WAKEUP
 sleep 2
 shot 09-keyguard
 adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml > $OUT/09-keyguard.xml
-adb shell dumpsys window | grep -E "mDreamingLockscreen|isKeyguardShowing|mShowingLockscreen|KeyguardController" | head -5
+adb shell dumpsys window | grep -E "isKeyguardShowing" | head -2
+# The notification is collapsed on the lock screen: expand it, then tap +15s where the expanded
+# card draws it (the shade's layout, shifted up with the card).
+E=$(grep -o '<node[^>]*content-desc="Expand"[^>]*>' $OUT/09-keyguard.xml | head -1 | grep -o 'bounds="[^"]*"' | grep -o '[0-9]\+' | tr '\n' ' ')
+echo "expand at: $E"
+set -- $E
+[ -n "$4" ] && adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+sleep 2
+shot 10-keyguard-expanded
+adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml > $OUT/10-keyguard-expanded.xml
+P=$(grep -o '<node[^>]*text="+15s"[^>]*>' $OUT/10-keyguard-expanded.xml | head -1 | grep -o 'bounds="[^"]*"' | grep -o '[0-9]\+' | tr '\n' ' ')
+echo "+15s at: $P"
+status
+set -- $P
+if [ -n "$4" ]; then adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 )); else adb shell input tap 143 $(( 344 - 23 )); fi
+sleep 3
+shot 11-keyguard-after-plus
+adb shell dumpsys window | grep -E "isKeyguardShowing" | head -2
+status
 
 adb logcat -d > $OUT/logcat.txt
 grep -E "FATAL EXCEPTION" -A2 $OUT/logcat.txt | head -20
