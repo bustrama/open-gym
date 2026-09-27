@@ -1,0 +1,54 @@
+# Scratch branch only: boots an Android 16 emulator, installs a debug build and records what
+# the rest-timer notifications actually do (android-smoke/run.sh). Not for main.
+name: Android smoke
+
+on:
+  push:
+    branches: [ci/android-smoke]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+          cache-dependency-path: |
+            frontend/android/**/*.gradle*
+            frontend/android/**/gradle-wrapper.properties
+      - run: npm ci
+        working-directory: frontend
+      - name: Build debug APK
+        working-directory: frontend
+        run: |
+          set -eu
+          npm run build:mobile
+          cd android
+          ./gradlew --no-daemon assembleDebug
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 36
+          target: google_apis
+          arch: x86_64
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: bash .github/android-smoke/run.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: smoke-out
+          path: smoke-out
