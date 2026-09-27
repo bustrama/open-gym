@@ -147,33 +147,26 @@ sleep 5
 forward
 plugin_rest k9 120
 sleep 1
+adb shell svc power stayon true
 adb shell locksettings set-pin 1234
 adb shell input keyevent KEYCODE_SLEEP
 sleep 2
 adb shell input keyevent KEYCODE_WAKEUP
 sleep 2
 shot 09-keyguard
-adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml > $OUT/09-keyguard.xml
-adb shell dumpsys window | grep -E "isKeyguardShowing" | head -2
-# The notification is collapsed on the lock screen: expand it, then tap +15s where the expanded
-# card draws it (the shade's layout, shifted up with the card).
-E=$(grep -o '<node[^>]*content-desc="Expand"[^>]*>' $OUT/09-keyguard.xml | head -1 | grep -o 'bounds="[^"]*"' | grep -o '[0-9]\+' | tr '\n' ' ')
-echo "expand at: $E"
-set -- $E
-[ -n "$4" ] && adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 ))
+adb shell dumpsys window | grep -E "isKeyguardShowing" | head -1
+status
+# The countdown is collapsed on the lock screen (its card at the top, the chevron at 276,233).
+# Expand it, then tap +15s where the expanded card draws it: the shade's layout, 23px higher.
+adb shell input tap 276 233
 sleep 2
 shot 10-keyguard-expanded
-adb shell uiautomator dump /sdcard/ui.xml && adb shell cat /sdcard/ui.xml > $OUT/10-keyguard-expanded.xml
-P=$(grep -o '<node[^>]*text="+15s"[^>]*>' $OUT/10-keyguard-expanded.xml | head -1 | grep -o 'bounds="[^"]*"' | grep -o '[0-9]\+' | tr '\n' ' ')
-echo "+15s at: $P"
-status
-set -- $P
-if [ -n "$4" ]; then adb shell input tap $(( ($1 + $3) / 2 )) $(( ($2 + $4) / 2 )); else adb shell input tap 143 $(( 344 - 23 )); fi
+adb shell input tap 143 321
 sleep 3
 shot 11-keyguard-after-plus
-adb shell dumpsys window | grep -E "isKeyguardShowing" | head -2
+adb shell dumpsys window | grep -E "isKeyguardShowing" | head -1
 status
-
+notif 11-keyguard-notif 7100
 adb logcat -d > $OUT/logcat.txt
 grep -E "FATAL EXCEPTION" -A2 $OUT/logcat.txt | head -20
 grep -i -E "RestTimer" $OUT/logcat.txt | grep -v "Capacitor/Plugin\|callback:" | tail -20
