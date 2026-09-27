@@ -28,6 +28,31 @@ describe('rest timer set to Off', () => {
   })
 })
 
+// The rest remembers the set that started it, so un-ticking that set can end it (Workout.toggle).
+describe('the set a rest belongs to', () => {
+  beforeEach(() => { vi.useFakeTimers(); useUI.setState({ timer: null }) })
+  afterEach(() => { useUI.getState().stopRest(); vi.useRealTimers() })
+
+  it('is kept with the exercise that started it', () => {
+    useUI.getState().startRest(90, 2, 1)
+    expect(useUI.getState().timer).toMatchObject({ forIdx: 2, forSet: 1 })
+  })
+
+  it('is forgotten when the rows renumber, and the rest keeps running', () => {
+    useUI.getState().startRest(90, 2, 1)
+    useUI.getState().forgetRestSet()
+    expect(useUI.getState().timer).toMatchObject({ forIdx: 2, total: 90 })
+    expect(useUI.getState().timer.forSet).toBeUndefined()
+  })
+
+  it('survives a change in time and a move of its exercise', () => {
+    useUI.getState().startRest(90, 2, 1)
+    useUI.getState().addRest(15)
+    useUI.getState().shiftRestOwner(0, 1)
+    expect(useUI.getState().timer).toMatchObject({ forIdx: 3, forSet: 1, total: 105 })
+  })
+})
+
 describe('opt-in timer screen flash', () => {
   let originalSettings
 

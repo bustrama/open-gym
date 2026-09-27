@@ -66,6 +66,26 @@ export function restOnRecheck({ timerRunning, unitDone, lastUnit }) {
 }
 
 /**
+ * Whether un-ticking set `setIdx` of entry `idx` should end the running rest.
+ *
+ * A tick says "I just finished this set", and the rest it started belongs to that set. Taking
+ * the tick back takes the rest back with it; otherwise the countdown (and its "rest over" push)
+ * runs on for a set you are now saying is not done. Only that set: un-ticking an older one to fix
+ * its reps must not cancel the break you are in the middle of.
+ *
+ * A superset rests once per round, started by whichever member's tick closed the round, so any
+ * member taking back its set of that round (the same set index) reopens the round and ends it.
+ *
+ * `rest` is the running timer ({ forIdx, forSet }); `unit` is the entry indices of the superset
+ * `idx` belongs to (a plain exercise is a group of one). An unknown owner keeps the rest.
+ */
+export function untickEndsRest(rest, unit, idx, setIdx) {
+  if (!rest || rest.forIdx == null || rest.forSet == null || setIdx !== rest.forSet) return false
+  if (idx === rest.forIdx) return true
+  return Array.isArray(unit) && unit.length > 1 && unit.includes(idx) && unit.includes(rest.forIdx)
+}
+
+/**
  * How long the rest after a completed set should run, in seconds.
  *
  * An exercise may carry its own `restSec` in its target (issue #10) — a heavy triple and a set

@@ -10,7 +10,7 @@ import { fmtNum, capWords, fmtDate, todayISO, exCount, DAYN } from '../lib/forma
 import { beep, vibrate, unlock } from '../lib/sound.js'
 import { t, exerciseNameFor } from '../lib/i18n.js'
 import { api, appBase } from '../lib/api.js'
-import { insertionIndexAfterCurrentUnit, nextUnfinishedUnit, setProgressHighWater, supersetFlowStep, restAfterSet, restOnRecheck, restSecFor, warmupRestSecFor } from '../lib/supersetFlow.js'
+import { insertionIndexAfterCurrentUnit, nextUnfinishedUnit, setProgressHighWater, supersetFlowStep, restAfterSet, restOnRecheck, restSecFor, untickEndsRest, warmupRestSecFor } from '../lib/supersetFlow.js'
 import Media from '../components/Media.jsx'
 import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, finishWorkout, workoutCompleteSheet, confirmSheet, exerciseNoteSheet, sessionNoteSheet, renameWorkoutSheet, swapActiveWorkoutExercise, barWeightSheet, menuSheet, effortPickerSheet, exerciseHistorySheet, addRoutineToSessionSheet } from '../sheets.jsx'
 import { effortColor } from '../lib/effort.js'
@@ -654,12 +654,21 @@ function ActiveWorkout() {
         : row)
     }
   })
-  const removeSet = idx => mutEntry(idx, e => { if (e.sets.length > 1) e.sets.pop() })
-  const addWarmup = idx => mutEntry(idx, e => {
-    const m = modeOf({ ...(e.target || {}), id: e.id })
-    e.sets = insertWarmupRow(e.sets, m, e.target || {}, defaultIncrement(e.id, S.unit))
-  })
-  const removeSetAt = (idx, i) => mutEntry(idx, e => { e.sets = removeRowAt(e.sets, i) })
+  // Removing or inserting rows renumbers the sets, and in a superset the rounds with them, so a
+  // running rest started from this group forgets which set it belongs to (useUI.forgetRestSet).
+  const reshapeRows = idx => {
+    const rest = useUI.getState().timer
+    if (rest && unitOf(units, idx).includes(rest.forIdx)) useUI.getState().forgetRestSet()
+  }
+  const removeSet = idx => { reshapeRows(idx); mutEntry(idx, e => { if (e.sets.length > 1) e.sets.pop() }) }
+  const addWarmup = idx => {
+    reshapeRows(idx)
+    mutEntry(idx, e => {
+      const m = modeOf({ ...(e.target || {}), id: e.id })
+      e.sets = insertWarmupRow(e.sets, m, e.target || {}, defaultIncrement(e.id, S.unit))
+    })
+  }
+  const removeSetAt = (idx, i) => { reshapeRows(idx); mutEntry(idx, e => { e.sets = removeRowAt(e.sets, i) }) }
   const pairAt = (first, second) => update(s => {
     s.active.entries = pairAdjacent(s.active.entries, first, second)
   })
@@ -868,9 +877,10 @@ function ActiveWorkout() {
     if (typeof document !== 'undefined') { const a = document.activeElement; if (a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA')) a.blur?.() }
     const m = modeAt(idx)
     const cardioEntry = m === 'cardio'
-    let exJustDone = false, workoutDone = false, checked = false
+    let exJustDone = false, workoutDone = false, checked = false, wasDone = false
     update(s => {
       const e = s.active.entries[idx]
+      wasDone = !!e.sets[i].done
       // A per-side tick flips just that side; the row's own `done` (both sides) is then
       // recomputed by toggleSide, so every completion check below still reads a single boolean.
       if (side) e.sets[i] = toggleSide(e.sets[i], side)
@@ -895,6 +905,14 @@ function ActiveWorkout() {
     if (workoutDone) workoutCompleteSheet()
     else if (exJustDone && cardioEntry) useUI.getState().toast(t('Cardio logged'))
     else if (exJustDone && m === 'time') useUI.getState().toast(t('Hold logged'))
+
+    // Taking back the tick that started the running rest takes the rest back too. Judged on the
+    // row's own done → undone, not on `checked`: the first side of a per-side set leaves the row
+    // undone without un-ticking anything.
+    if (wasDone && !checked) {
+      if (untickEndsRest(useUI.getState().timer, unitOf(units, idx), idx, i)) stopRest()
+      return
+    }
 
     // Only progress beyond this exercise's high-water mark may navigate or change rest. This
     // prevents an uncheck/re-check of finished work from replaying the flow side effects.
@@ -922,7 +940,7 @@ function ActiveWorkout() {
       // A re-check of finished work must not navigate or reopen a sheet, but it may still owe
       // you a rest — see restOnRecheck, and the other half of issue #3.
       if (!progress.isNew) {
-        if (!restBeforeWarmup && restOnRecheck({ timerRunning: !!useUI.getState().timer, unitDone: freshUnitDone, lastUnit: freshWorkoutDone })) startRest(restAfter, idx)
+        if (!restBeforeWarmup && restOnRecheck({ timerRunning: !!useUI.getState().timer, unitDone: freshUnitDone, lastUnit: freshWorkoutDone })) startRest(restAfter, idx, i)
         return
       }
 
@@ -931,17 +949,17 @@ function ActiveWorkout() {
       // stopRest() first so a rest that belongs after this set replaces the one that was running.
       if (freshUnitDone) stopRest()
       if (!freshUnit || freshUnit.length <= 1) {
-        if (!restBeforeWarmup && restAfterSet({ unitDone: freshUnitDone, lastUnit: freshWorkoutDone })) startRest(restAfter, idx)
+        if (!restBeforeWarmup && restAfterSet({ unitDone: freshUnitDone, lastUnit: freshWorkoutDone })) startRest(restAfter, idx, i)
         return
       }
 
       const step = supersetFlowStep(fresh.entries, freshUnit, idx)
       if (!step) return
       if (step.unitDone) {
-        if (nextUnit?.length && !restBeforeWarmup) startRest(restAfter, idx)
+        if (nextUnit?.length && !restBeforeWarmup) startRest(restAfter, idx, i)
       } else {
         if (step.nextIdx != null) update(s => { if (s.active) s.active.cur = step.nextIdx })
-        if (step.roundDone) startRest(restAfter, idx)
+        if (step.roundDone) startRest(restAfter, idx, i)
       }
     }
   }

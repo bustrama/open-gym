@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { insertionIndexAfterCurrentUnit, nextUnfinishedUnit, setProgressHighWater, supersetFlowStep, restAfterSet, restOnRecheck, restSecFor, warmupRestSecFor } from './supersetFlow.js'
+import { insertionIndexAfterCurrentUnit, nextUnfinishedUnit, setProgressHighWater, supersetFlowStep, restAfterSet, restOnRecheck, restSecFor, untickEndsRest, warmupRestSecFor } from './supersetFlow.js'
 
 const entry = done => ({ sets: done.map(value => ({ done: value })) })
 
@@ -90,6 +90,38 @@ describe('rest on a re-check', () => {
 
   it('rests after closing an exercise that is not the last one', () => {
     expect(restOnRecheck({ timerRunning: false, unitDone: true, lastUnit: false })).toBe(true)
+  })
+})
+
+// Un-ticking a set takes back the "I just finished this" that started the rest, so the rest
+// goes with it. Only the set that started it: un-ticking an older set to fix its reps leaves the
+// break you are in the middle of alone.
+describe('untickEndsRest', () => {
+  const rest = { left: 60, total: 90, endsAt: 0, forIdx: 1, forSet: 2 }
+
+  it('ends the rest when the set that started it is un-ticked', () => {
+    expect(untickEndsRest(rest, [1], 1, 2)).toBe(true)
+  })
+
+  it('keeps it for any other set of the same exercise', () => {
+    expect(untickEndsRest(rest, [1], 1, 1)).toBe(false)
+    expect(untickEndsRest(rest, [1], 1, 3)).toBe(false)
+  })
+
+  it('keeps it for a set of another exercise', () => {
+    expect(untickEndsRest(rest, [0], 0, 2)).toBe(false)
+  })
+
+  it('ends a superset rest when any member takes back its set of that round', () => {
+    // The round's rest was started by whichever member's tick closed it (here entry 1).
+    expect(untickEndsRest(rest, [0, 1], 0, 2)).toBe(true)
+    expect(untickEndsRest(rest, [0, 1], 0, 1)).toBe(false)
+  })
+
+  it('does nothing without a running rest, or when its set is unknown', () => {
+    expect(untickEndsRest(null, [1], 1, 2)).toBe(false)
+    expect(untickEndsRest({ ...rest, forSet: undefined }, [1], 1, 2)).toBe(false)
+    expect(untickEndsRest({ ...rest, forIdx: undefined }, [1], 1, 2)).toBe(false)
   })
 })
 

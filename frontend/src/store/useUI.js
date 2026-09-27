@@ -62,8 +62,9 @@ let workDone = null
 export const useUI = create((set, get) => ({
   sheets: [],          // { id, render:(close)=>JSX, kind:'sheet'|'center', locked }
   toastMsg: '',
-  timer: null,         // rest countdown between sets — { left, total, endsAt, forIdx }
+  timer: null,         // rest countdown between sets — { left, total, endsAt, forIdx, forSet }
                        // forIdx: index of the active entry whose set started the rest (undefined when unknown)
+                       // forSet: that set's row index in the entry — un-ticking it ends the rest (lib/supersetFlow.js untickEndsRest)
   work: null,          // work countdown DURING a timed set (issue #16) — { left, total, endsAt, label }
   timerFlashId: 0,     // changing the id retriggers the theme-blink visual alert
 
@@ -87,13 +88,13 @@ export const useUI = create((set, get) => ({
     toastTm = setTimeout(() => set({ toastMsg: '' }), 2200)
   },
 
-  startRest(sec, forIdx) {
+  startRest(sec, forIdx, forSet) {
     get().stopRest()
     // Rest timer set to Off. Stopping and returning rather than starting a zero-length timer
     // keeps every caller honest: the four places that start a rest do not each need to know.
     if (!(sec > 0)) return
     const endsAt = Date.now() + sec * 1000
-    set({ timer: { left: sec, total: sec, endsAt, forIdx } })
+    set({ timer: { left: sec, total: sec, endsAt, forIdx, forSet } })
     pushRestTimer(sec)
     timerTick = () => {
       const tm = get().timer
@@ -136,6 +137,14 @@ export const useUI = create((set, get) => ({
     const tm = get().timer
     if (!tm || !(tm.forIdx >= at)) return
     set({ timer: { ...tm, forIdx: tm.forIdx + delta } })
+  },
+  // The rows the rest's set lives among changed shape (a set removed, a warm-up inserted), so the
+  // set index it remembers may now name another row. Forget it rather than guess: the rest keeps
+  // running, it just no longer ends on an un-tick. The caller decides whether the change touched it.
+  forgetRestSet() {
+    const tm = get().timer
+    if (!tm || tm.forSet == null) return
+    set({ timer: { ...tm, forSet: undefined } })
   },
   stopRest() {
     if (timerInt) clearInterval(timerInt); timerInt = null
