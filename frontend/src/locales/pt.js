@@ -1250,4 +1250,9 @@ export default {
   'already added': 'já adicionado',
   'no exercises': 'sem exercícios',
   'Pick equipment': 'Escolher equipamento',
+  'Do later': 'Fazer mais tarde',
+  '“{0}” saved for later': '“{0}” fica para mais tarde',
+  'Tap an exercise to go to it.': 'Toca num exercício para ir até ele.',
+  'Up next: {0}': 'A seguir: {0}',
+  'Add as superset': 'Adicionar como supersérie',
 }

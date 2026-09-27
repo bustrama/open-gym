@@ -26,6 +26,7 @@ const mocks = vi.hoisted(() => {
     effortPickerSheet: vi.fn(),
     exerciseHistorySheet: vi.fn(),
     renameWorkoutSheet: vi.fn(),
+    openSheet: vi.fn(),
   }
   state.stopRest = vi.fn(() => { state.timer = null })
   state.stopWork = vi.fn(() => { state.work = null })
@@ -49,6 +50,7 @@ const mocks = vi.hoisted(() => {
     forgetRestSet: state.forgetRestSet,
     startWork: vi.fn(),
     toast: state.toast,
+    openSheet: state.openSheet,
   })
   return state
 })
@@ -61,6 +63,7 @@ vi.mock('../store/useStore.js', () => {
 vi.mock('../store/useUI.js', () => {
   const useUI = selector => selector ? selector(mocks.uiSnapshot()) : mocks.uiSnapshot()
   useUI.getState = mocks.uiSnapshot
+  useUI.setState = patch => { if ('timer' in patch) mocks.timer = patch.timer }
   return { useUI }
 })
 vi.mock('react-router-dom', () => ({ useNavigate: () => () => {} }))
@@ -184,9 +187,9 @@ async function rerender() {
   await act(async () => { root.render(React.createElement(Workout)) })
 }
 
-async function addExerciseThroughSheets(ex = { id: 'added-exercise' }, cfg = { mode: 'reps', sets: 1, reps: 5, weight: 0 }) {
+async function addExerciseThroughSheets(ex = { id: 'added-exercise' }, cfg = { mode: 'reps', sets: 1, reps: 5, weight: 0 }, label = 'Add exercise') {
   const addButton = [...container.querySelectorAll('button')]
-    .find(button => button.textContent.trim() === 'Add exercise')
+    .find(button => button.textContent.trim() === label || button.getAttribute('aria-label') === label)
   expect(addButton).toBeTruthy()
   await act(async () => { addButton.dispatchEvent(new dom.Event('click', { bubbles: true })) })
 
@@ -500,6 +503,51 @@ describe('Workout add exercise flow', () => {
       'current-group', 'current-group',
     ])
     expect(mocks.S.active.cur).toBe(2)
+  })
+
+  const addAsSuperset = ex => addExerciseThroughSheets(ex, undefined, 'Add as superset')
+
+  it('adds as a superset with the current exercise and keeps the marker on it', async () => {
+    await mount([exercise('leg-press', [true, false]), exercise('curl', [false])])
+
+    await addAsSuperset({ id: 'calf-press' })
+
+    expect(mocks.S.active.entries.map(entry => entry.id)).toEqual(['leg-press', 'calf-press', 'curl'])
+    expect(mocks.S.active.entries[0].sg).toBeTruthy()
+    expect(mocks.S.active.entries[1].sg).toBe(mocks.S.active.entries[0].sg)
+    expect(mocks.S.active.entries[2].sg).toBeUndefined()
+    expect(mocks.S.active.cur).toBe(0)
+    await rerender()
+    expect(container.querySelector('.ss-card')).toBeTruthy()
+  })
+
+  it('joins the current superset as its next member', async () => {
+    await mount([
+      exercise('a', [false], { sg: 'pair' }),
+      exercise('b', [false], { sg: 'pair' }),
+      exercise('c', [false]),
+    ], 1)
+
+    await addAsSuperset({ id: 'added' })
+
+    expect(mocks.S.active.entries.map(entry => [entry.id, entry.sg])).toEqual([
+      ['a', 'pair'], ['b', 'pair'], ['added', 'pair'], ['c', undefined],
+    ])
+    expect(mocks.S.active.cur).toBe(1)
+  })
+
+  it('opens the picker under its own title', async () => {
+    await mount([exercise('a', [false])])
+    await addAsSuperset({ id: 'b' })
+    expect(mocks.exercisePicker.mock.calls.at(-1)[1]).toBe('Add as superset')
+    expect(mocks.exercisePicker.mock.calls.length).toBe(1)
+  })
+
+  it('is not offered before the session has an exercise', async () => {
+    await mount([])
+    const labels = [...container.querySelectorAll('button')].map(button => button.textContent.trim())
+    expect(labels).toContain('Add exercise')
+    expect(container.querySelector('button[aria-label="Add as superset"]')).toBeNull()
   })
 })
 
@@ -1556,5 +1604,124 @@ describe('set-row column header', () => {
     await mount([exercise('plain-bench', [false])], 0, { wc: { steppers: false } })
     expect(container.querySelector('.sethead').classList.contains('plain')).toBe(true)
     expect(container.querySelector('.setrow .stp.w').classList.contains('plain')).toBe(true)
+  })
+})
+
+describe('exercises overview and do later', () => {
+  const sheets = []
+  afterEach(async () => {
+    for (const sheet of sheets.splice(0)) await act(async () => { sheet.root.unmount() })
+  })
+  const click = async el => { await act(async () => { el.dispatchEvent(new dom.Event('click', { bubbles: true })) }) }
+  // The overview is rendered by the app's sheet host; here it is rendered into its own root from
+  // the render function Workout handed to openSheet.
+  async function openOverview() {
+    const label = container.querySelector('.ovw-open')
+    expect(label).toBeTruthy()
+    await click(label)
+    const render = mocks.openSheet.mock.calls.at(-1)?.[0]
+    expect(render).toEqual(expect.any(Function))
+    const host = document.createElement('div')
+    document.body.appendChild(host)
+    const sheet = { host, root: createRoot(host), close: vi.fn() }
+    sheets.push(sheet)
+    await act(async () => { sheet.root.render(render(sheet.close)) })
+    return sheet
+  }
+  const rows = sheet => [...sheet.host.querySelectorAll('.ovw-row')]
+  const laterChip = row => [...row.querySelectorAll('button')].find(b => b.textContent.trim() === 'Do later')
+
+  it('opens from the "Exercise i / n" label in cards and in list mode', async () => {
+    await mount([exercise('a', [false]), exercise('b', [false])])
+    expect(container.querySelector('.ovw-open').textContent).toBe('Exercise 1 / 2')
+    await openOverview()
+    expect(mocks.openSheet).toHaveBeenCalledOnce()
+
+    await unmount()
+    await mount([exercise('a', [false]), exercise('b', [false])], 0, { active: { workoutView: 'list' } })
+    expect(container.querySelectorAll('.wl-hd .ovw-open')).toHaveLength(2)
+  })
+
+  it('lists every unit with its status, set count and the current mark', async () => {
+    await mount([
+      exercise('a', [true, true]),
+      exercise('b', [true, false], { sg: 'pair' }),
+      exercise('c', [false], { sg: 'pair' }),
+      exercise('d', [false, false]),
+    ], 3)
+    const sheet = await openOverview()
+
+    expect(rows(sheet).map(row => [...row.classList].filter(c => c !== 'item' && c !== 'ovw-row'))).toEqual([
+      ['done'], ['started'], ['todo', 'cur'],
+    ])
+    expect(rows(sheet).map(row => row.querySelector('.ss').textContent)).toEqual(['2/2 sets', '1/3 sets', '0/2 setsCurrent'])
+    expect(rows(sheet).map(row => row.querySelector('.ovw-n').textContent)).toEqual(['', '2', '3'])
+    expect(rows(sheet)[2].querySelector('.tag.acc')?.textContent).toBe('Current')
+  })
+
+  it('jumps to a tapped unit and closes the sheet', async () => {
+    await mount([exercise('a', [false]), exercise('b', [false], { sg: 'pair' }), exercise('c', [false], { sg: 'pair' })])
+    const sheet = await openOverview()
+    await click(rows(sheet)[1])
+    expect(sheet.close).toHaveBeenCalled()
+    expect(mocks.S.active.cur).toBe(1)
+  })
+
+  it('scrolls the list to the unit it jumps to, a frame after the sheet closes', async () => {
+    await mount([exercise('a', [false]), exercise('b', [false]), exercise('c', [false])], 0, { active: { workoutView: 'list' } })
+    await flushFrame()
+    mocks.scrollCalls.length = 0
+    const sheet = await openOverview()
+    await click(rows(sheet)[2])
+    await rerender()
+    expect(mocks.scrollCalls).toHaveLength(0)
+    await flushFrame()
+    expect(mocks.scrollCalls.map(call => call.node.dataset.exidx)).toEqual(['2'])
+  })
+
+  it('does the current exercise later: it moves behind the unfinished ones and the next one is current', async () => {
+    await mount([exercise('a', [true]), exercise('b', [false]), exercise('c', [false]), exercise('d', [false]), exercise('e', [true])], 1)
+    const sheet = await openOverview()
+    await click(laterChip(rows(sheet)[1]))
+
+    expect(sheet.close).toHaveBeenCalled()
+    expect(mocks.S.active.entries.map(e => e.id)).toEqual(['a', 'c', 'd', 'b', 'e'])
+    expect(mocks.S.active.entries[mocks.S.active.cur].id).toBe('c')
+    expect(mocks.toast).toHaveBeenCalledWith(expect.stringContaining('saved for later'))
+    expect(mocks.stopRest).not.toHaveBeenCalled()
+  })
+
+  it('offers Do later only where there is something to wait behind', async () => {
+    await mount([exercise('a', [true]), exercise('b', [false]), exercise('c', [false])], 1)
+    const sheet = await openOverview()
+    expect(rows(sheet).map(row => !!laterChip(row))).toEqual([false, true, true])
+
+    await unmount()
+    await mount([exercise('a', [true]), exercise('b', [false])], 1)
+    const lone = await openOverview()
+    expect(rows(lone).map(row => !!laterChip(row))).toEqual([false, false])
+  })
+
+  it('offers Do later in the More menu and keeps a running rest on the set that started it', async () => {
+    await mount([exercise('a', [true, false]), exercise('b', [false]), exercise('c', [false])], 0)
+    mocks.timer = { left: 60, total: 90, endsAt: Date.now() + 60000, forIdx: 0, forSet: 0 }
+    await rerender()
+    await click(container.querySelector('button[aria-label="More"]'))
+    const item = mocks.menuSheet.mock.calls.at(-1)[0].items.filter(Boolean).find(it => it.label === 'Do later')
+    expect(item?.disabled).toBe(false)
+    await act(async () => { item.onClick() })
+
+    expect(mocks.S.active.entries.map(e => e.id)).toEqual(['b', 'c', 'a'])
+    expect(mocks.S.active.entries[mocks.S.active.cur].id).toBe('b')
+    expect(mocks.timer.forIdx).toBe(2)
+    expect(mocks.timer.forSet).toBe(0)
+  })
+
+  it('disables Do later while a timed hold can still write by index', async () => {
+    mocks.work = { left: 5, total: 5, endsAt: Date.now() + 5000 }
+    await mount([exercise('a', [false]), exercise('b', [false])], 0)
+    await click(container.querySelector('button[aria-label="More"]'))
+    const item = mocks.menuSheet.mock.calls.at(-1)[0].items.filter(Boolean).find(it => it.label === 'Do later')
+    expect(item.disabled).toBe(true)
   })
 })

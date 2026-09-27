@@ -1,6 +1,10 @@
 import { useEffect } from 'react'
 import { useUI } from '../store/useUI.js'
-import { t } from '../lib/i18n.js'
+import { useStore } from '../store/useStore.js'
+import { t, exerciseNameFor } from '../lib/i18n.js'
+import { exOr } from '../lib/exercises.js'
+import { capWords } from '../lib/format.js'
+import { upNextAfterRest } from '../lib/active-workout-order.js'
 import { Button } from './ui.jsx'
 
 const clock = sec => Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0')
@@ -13,6 +17,7 @@ export default function RestTimer() {
   const timer = useUI(s => s.timer)
   const work = useUI(s => s.work)
   const { addRest, stopRest, finishWorkEarly, stopWork } = useUI()
+  const active = useStore(s => s.S.active)
   const on = work || timer
   // The bar is fixed above the tab bar and floats over whatever is beneath it — during a
   // rest that was the next set's row. Extra bottom padding lets the page scroll clear.
@@ -38,11 +43,17 @@ export default function RestTimer() {
   // with about 30px and stops saying anything. So the rest variant stacks: clock and bar
   // read at a glance, controls get their own row. −15 and +15 sit together in number-line
   // order; Skip is pushed to the far edge, away from the button you tap to buy more time.
+  // A rest that closes an exercise leads into another one, and the bar names it (lib/
+  // active-workout-order.js upNextAfterRest) above the progress line, in the clock's row height.
+  const next = upNextAfterRest(active, timer.forIdx)
   return (
     <div id="timer" className="rest">
       <div className="head">
         <div className="t">{clock(timer.left)}</div>
-        <div className="bar"><i style={{ width: pct + '%' }} /></div>
+        <div className="grow">
+          {next && <div className="lbl">{t('Up next: {0}', next.map(i => capWords(exerciseNameFor(exOr(active.entries[i].id)))).join(' + '))}</div>}
+          <div className="bar"><i style={{ width: pct + '%' }} /></div>
+        </div>
       </div>
       <div className="acts">
         <Button size="sm" icon="minus" onClick={() => addRest(-15)}>15s</Button>

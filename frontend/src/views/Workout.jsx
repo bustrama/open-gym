@@ -20,7 +20,7 @@ import { nextPrescription, applyPrescription, defaultIncrement, weightIncrement,
 import { progressionGuidance } from '../lib/progression-copy.js'
 import { glyphOf } from '../lib/glyphs.js'
 import { isWarmupRow, isDropSet, isRestPauseSet, dropsOf, clustersOf, addDrop, addCluster, removeDropAt, removeClusterAt, setDropAt, setClusterAt, nextDropWeight, nextBurstReps, isSideSet, makeSideSet, setSideField, toggleSide, addSideDrop, removeSideDropAt, setSideDropAt, addSideCluster, removeSideClusterAt, setSideClusterAt } from '../lib/workout-model.js'
-import { canMoveActiveWorkoutUnit, moveActiveWorkoutUnit } from '../lib/active-workout-order.js'
+import { activeWorkoutOverview, canMoveActiveWorkoutUnit, canPostponeActiveWorkoutUnit, moveActiveWorkoutUnit, postponeActiveWorkoutUnit } from '../lib/active-workout-order.js'
 import { MUSCLE_NAME } from '../lib/muscles.js'
 
 const SWIPE_MIN_DISTANCE = 48
@@ -73,7 +73,7 @@ function Elapsed({ start }) {
 // drops everything that is not a set you are logging — media, tag chips, the note lines, the
 // "last time" recap and the progression line — leaving the name, the ⋯ menu and the sets.
 // Nothing dropped is lost: it is all still on the ⋯ menu, or one ⋮ switch back to list/cards.
-function ExerciseBlock({ entryIdx, compact, dense, onToggle, onToggleSide, onField, onAddSet, onRemoveSet, onAddWarmup, onRemoveSetAt, onStartTimed, onPairPrev, onPairNext, onSetRowRef, onProgressionSettings, onSwap, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onRemoveExercise, busy }) {
+function ExerciseBlock({ entryIdx, compact, dense, onToggle, onToggleSide, onField, onAddSet, onRemoveSet, onAddWarmup, onRemoveSetAt, onStartTimed, onPairPrev, onPairNext, onSetRowRef, onProgressionSettings, onSwap, onDoLater, canDoLater, onMoveUp, onMoveDown, canMoveUp, canMoveDown, onRemoveExercise, busy }) {
   const S = useStore(s => s.S)
   const update = useStore(s => s.update)
   const working = useUI(s => s.work)
@@ -226,6 +226,7 @@ function ExerciseBlock({ entryIdx, compact, dense, onToggle, onToggleSide, onFie
       onPairPrev && { icon: 'link', label: t('Make superset with previous'), onClick: onPairPrev },
       onPairNext && { icon: 'link', label: t('Make superset with next'), onClick: onPairNext },
       onSwap && { icon: 'shuffle', label: t('Swap exercise'), onClick: onSwap, disabled: busy },
+      onDoLater && { icon: 'clock', label: t('Do later'), onClick: onDoLater, disabled: busy || !canDoLater },
       onMoveUp && { icon: 'chevronUp', label: t('Move up'), onClick: onMoveUp, disabled: busy || !canMoveUp },
       onMoveDown && { icon: 'chevronDown', label: t('Move down'), onClick: onMoveDown, disabled: busy || !canMoveDown },
       onRemoveExercise && { icon: 'trash', label: t('Remove exercise'), onClick: onRemoveExercise, danger: true, disabled: busy },
@@ -495,6 +496,38 @@ function ExerciseBlock({ entryIdx, compact, dense, onToggle, onToggleSide, onFie
   </>
 }
 
+/* ---------- exercises overview ---------- */
+// The whole session at a glance, opened from "Exercise i / n": what is done, what is started,
+// what is still to do, and a jump to any of it. "Do later" is here too, for the moment it is
+// needed: the machine you are about to use is taken. It reads the live session, so a row it
+// moves lands in its new place while the sheet is still open.
+function ExercisesOverview({ close, onJump, onLater }) {
+  const A = useStore(s => s.S.active)
+  const busy = useUI(s => !!s.work)
+  useEffect(() => { if (!A) close() }, [!A])
+  if (!A) return null
+  return <>
+    <h3>{t('Exercises')}</h3>
+    <div className="muted small" style={{ marginBottom: 12 }}>{t('Tap an exercise to go to it.')}</div>
+    <div className="list">
+      {activeWorkoutOverview(A).map((row, n) => {
+        const first = row.indices[0]
+        const canLater = !busy && canPostponeActiveWorkoutUnit(A, first)
+        return <div key={row.indices.map(i => A.entries[i].id + '@' + i).join('+')}
+          className={'item ovw-row ' + row.status + (row.current ? ' cur' : '')} data-exidx={first}
+          onClick={() => { close(); onJump(first) }}>
+          <span className="ovw-n">{row.status === 'done' ? <Icon name="check" /> : n + 1}</span>
+          <div className="grow">
+            <div className="tt capitalize">{row.members.map(m => exerciseNameFor(exOr(m.id))).join(' + ')}</div>
+            <div className="ss">{t('{0} sets', row.done + '/' + row.total)}{row.current && <span className="tag acc" style={{ marginLeft: 8 }}>{t('Current')}</span>}</div>
+          </div>
+          {row.status !== 'done' && canLater && <button className="chip nocap" onClick={event => { event.stopPropagation(); close(); onLater(first) }}>{t('Do later')}</button>}
+        </div>
+      })}
+    </div>
+  </>
+}
+
 /* ---------- active workout ---------- */
 export function removeActiveExercise(idx) {
   // Clear the work callback before indexes can shift. This also protects a confirmation sheet
@@ -605,24 +638,25 @@ function ActiveWorkout() {
   // both would win over a scroll made right here. A frame asked for now runs after theirs.
   const listRef = useRef(null)
   const hdrRef = useRef(null)
+  const scheduleFrame = callback => window.requestAnimationFrame
+    ? window.requestAnimationFrame(callback)
+    : window.setTimeout(callback, 0)
+  const scrollListToCurrent = () => {
+    const list = listRef.current
+    const el = list?.querySelector('.wl-unit.cur')
+    if (!el || typeof el.scrollIntoView !== 'function') return
+    // The sticky header grows when the workout name wraps; the unit's scroll margin (index.css)
+    // clears whatever height it has right now, with a one-line height as the fallback.
+    const hdrH = hdrRef.current?.offsetHeight
+    if (hdrH) list.style.setProperty('--whdr-h', hdrH + 'px')
+    el.scrollIntoView({ block: 'start' })
+  }
   useEffect(() => {
     if (!listMode) return
-    const schedule = callback => window.requestAnimationFrame
-      ? window.requestAnimationFrame(callback)
-      : window.setTimeout(callback, 0)
     const cancel = frame => window.cancelAnimationFrame
       ? window.cancelAnimationFrame(frame)
       : window.clearTimeout(frame)
-    const frame = schedule(() => {
-      const list = listRef.current
-      const el = list?.querySelector('.wl-unit.cur')
-      if (!el || typeof el.scrollIntoView !== 'function') return
-      // The sticky header grows when the workout name wraps; the unit's scroll margin (index.css)
-      // clears whatever height it has right now, with a one-line height as the fallback.
-      const hdrH = hdrRef.current?.offsetHeight
-      if (hdrH) list.style.setProperty('--whdr-h', hdrH + 'px')
-      el.scrollIntoView({ block: 'start' })
-    })
+    const frame = scheduleFrame(scrollListToCurrent)
     return () => cancel(frame)
   }, [workoutView])
 
@@ -680,6 +714,16 @@ function ActiveWorkout() {
   })
   const onPairPrev = !isSuperset && cur > 0 ? () => pairAt(cur - 1, cur) : null
   const onPairNext = !isSuperset && cur < A.entries.length - 1 ? () => pairAt(cur, cur + 1) : null
+  // A reorder hands back each entry's old index in its new place; what is keyed by index — the
+  // progress marks and the running rest's owner — follows its entry there.
+  const followReorder = indices => {
+    progressHighWater.current = indices.map(index => progressHighWater.current[index])
+    const rest = useUI.getState().timer
+    if (rest && rest.forIdx != null) {
+      const forIdx = indices.indexOf(rest.forIdx)
+      if (forIdx >= 0) useUI.setState({ timer: { ...rest, forIdx } })
+    }
+  }
   const moveUnitAt = (at, direction) => {
     const ui = useUI.getState()
     const active = useStore.getState().S.active
@@ -689,23 +733,35 @@ function ActiveWorkout() {
     ui.stopWork()
     update(s => {
       const moved = moveActiveWorkoutUnit(s.active, at, direction)
-      if (!moved) return
-      progressHighWater.current = moved.indices.map(index => progressHighWater.current[index])
-      const rest = useUI.getState().timer
-      if (rest && rest.forIdx != null) {
-        const forIdx = moved.indices.indexOf(rest.forIdx)
-        if (forIdx >= 0) useUI.setState({ timer: { ...rest, forIdx } })
-      }
+      if (moved) followReorder(moved.indices)
     }, true)
   }
 
   const moveCurrentUnit = direction => moveUnitAt(cur, direction)
+  // "Do later" (lib/active-workout-order.js): the unit waits behind the others still to do, and
+  // when it was the current one the marker moves on to the next. Same index bookkeeping as a
+  // move; the rest keeps running for the set that started it.
+  const postponeUnitAt = at => {
+    const ui = useUI.getState()
+    const active = useStore.getState().S.active
+    if (ui.work || !canPostponeActiveWorkoutUnit(active, at)) return
+    const names = supersetUnits(active.entries).find(u => u.includes(at))
+      .map(i => capWords(exerciseNameFor(exOr(active.entries[i].id)))).join(' + ')
+    ui.stopWork()
+    update(s => {
+      const moved = postponeActiveWorkoutUnit(s.active, at)
+      if (moved) followReorder(moved.indices)
+    }, true)
+    ui.toast(t('“{0}” saved for later', names))
+  }
 
   // One prop object per entry so the card and list layouts share the exact same wiring. The
   // exercise-level actions (swap, move, remove) address the entry itself, so the "more" menu of
   // a superset member acts on that member, not on whatever the marker happens to point at.
   const blockProps = idx => ({
     onSwap: () => swapActiveWorkoutExercise(idx),
+    onDoLater: () => postponeUnitAt(idx),
+    canDoLater: canPostponeActiveWorkoutUnit(A, idx),
     onMoveUp: () => moveUnitAt(idx, -1),
     onMoveDown: () => moveUnitAt(idx, 1),
     canMoveUp: canMoveActiveWorkoutUnit(A, idx, -1),
@@ -740,6 +796,16 @@ function ActiveWorkout() {
   // "Set current" on its header instead of Prev/Next. The bottom Move/Swap/Remove actions
   // keep operating on it, and completing sets still advances it on its own.
   const focusUnit = firstIdx => update(s => { if (s.active) s.active.cur = firstIdx })
+  // The overview (tap "Exercise i / n") lists the session and jumps anywhere in it. In list mode
+  // the jump also scrolls there, a frame later for the same reason the list's opening scroll
+  // waits: the closing sheet puts the page back where it was first.
+  const jumpToUnit = firstIdx => {
+    focusUnit(firstIdx)
+    if (listMode) scheduleFrame(scrollListToCurrent)
+  }
+  const openOverview = () => useUI.getState().openSheet(close => (
+    <ExercisesOverview close={close} onJump={jumpToUnit} onLater={postponeUnitAt} />
+  ))
   // The header ⋮ re-lays-out the running session without touching the saved default
   // (Settings → During a workout → Workout view). It writes s.active.workoutView, which the
   // render above prefers over S.workoutView.
@@ -994,6 +1060,45 @@ function ActiveWorkout() {
     }
   }, [])
 
+  // The picker's pick goes in right after the current unit. `asSuperset` pairs it into that unit
+  // ("Add as superset"): the marker stays where it is, since the unit you are in is the same one.
+  const addExercise = asSuperset => exercisePicker((ex, quick) => {
+    // A freehand add inherits the current unit's routine (its `rid`) so it lands in that
+    // routine's block in a combined session and gets a real prescription; a routine-less
+    // freestyle session has no `rid` to inherit. `noProg` is never set independently here —
+    // the only mid-session route to an excluded entry is "Add routine".
+    const curRid = A.entries[A.cur]?.rid
+    const routine = curRid ? S.routines.find(r => r.id === curRid) : null
+    const freestyle = !routine
+    // Freestyle has no routine prescription to apply: show the last target in the config
+    // sheet and carry its completed rows forward. A planned session uses its configured
+    // target when progression is off, while progression-enabled sessions keep their path.
+    const seed = freestyle ? freestyleConfig(S, { id: ex.id, ...defaultConfig(ex.id) }) : null
+    const commit = cfg => update(s => {
+      const full = { ...cfg, id: ex.id }
+      const plan = freestyle ? null : nextPrescription(s, full, routine)
+      const sets = buildSets(s, full, {
+        step: modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit),
+        ...(freestyle ? { preferLast: true } : {}),
+        ...(plan?.kind === 'off' ? { useTarget: true } : {})
+      })
+      const progressed = freestyle ? sets : applyPrescription(sets, plan, modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit))
+      const insertAt = insertionIndexAfterCurrentUnit(supersetUnits(s.active.entries), s.active.cur, s.active.entries.length)
+      s.active.entries.splice(insertAt, 0, { id: ex.id, target: { ...cfg }, plan, sets: applyIntensifierPlan(progressed, full), ...(curRid ? { rid: curRid } : {}) })
+      // pairAdjacent joins the current unit's group, or starts one with a plain exercise.
+      if (asSuperset && insertAt > 0) s.active.entries = pairAdjacent(s.active.entries, insertAt - 1, insertAt)
+      else s.active.cur = insertAt
+      useUI.getState().shiftRestOwner(insertAt, 1)
+    })
+    // The "+" on a picker row reads as "add this now" — routed through the same detail
+    // sheet before, so it added nothing until you'd scrolled past it and found the real
+    // button. Quick-add commits with the same default (or, freestyle, last-session) config
+    // the sheet would have opened with; tapping the row still opens that sheet for anyone
+    // who wants to set sets/reps first.
+    if (quick) { commit(seed || defaultConfig(ex.id)); useUI.getState().toast(t('“{0}” added to {1}', capWords(exerciseNameFor(ex)), routine ? routine.name : t('Freestyle'))) }
+    else exConfigSheet(ex, null, commit, null, routine, seed)
+  }, asSuperset ? t('Add as superset') : undefined)
+
   return <div className="narrow">
     {/* In list mode the whole session scrolls under the header, so the header (name, clock,
         set counter, discard/finish, progress) stays pinned — the one thing you want in view
@@ -1018,7 +1123,7 @@ function ActiveWorkout() {
           const isCur = u.includes(cur)
           return <section key={u.join('-')} className={'wl-unit' + (isCur ? ' cur' : '')} data-exidx={u[0]}>
             <div className="wl-hd">
-              <span className="muted small">{multi ? t('Superset {0} / {1}', ui + 1, units.length) : t('Exercise {0} / {1}', ui + 1, units.length)}</span>
+              <button className="ovw-open muted small" aria-haspopup="dialog" onClick={openOverview}>{multi ? t('Superset {0} / {1}', ui + 1, units.length) : t('Exercise {0} / {1}', ui + 1, units.length)}<Icon name="chevronDown" /></button>
               {isCur
                 ? <span className="tag acc">{t('Current')}</span>
                 : <button className="chip" onClick={() => focusUnit(u[0])}>{t('Set current')}</button>}
@@ -1048,7 +1153,7 @@ function ActiveWorkout() {
         })}
       </div>
     ) : <>
-      <div className="muted small" style={{ marginBottom: 6 }}>{isSuperset ? t('Superset {0} / {1}', unitIdx + 1, units.length) : t('Exercise {0} / {1}', unitIdx + 1, units.length)}</div>
+      <button className="ovw-open muted small" style={{ marginBottom: 6 }} aria-haspopup="dialog" onClick={openOverview}>{isSuperset ? t('Superset {0} / {1}', unitIdx + 1, units.length) : t('Exercise {0} / {1}', unitIdx + 1, units.length)}<Icon name="chevronDown" /></button>
       <div className="workout-swipe-surface" data-testid="workout-swipe-surface"
         onPointerDown={onSwipePointerDown}
         onPointerUp={event => finishSwipe(event, true)}
@@ -1084,40 +1189,11 @@ function ActiveWorkout() {
     </div>}
     {!listMode && <div style={{ height: 10 }} />}
     {wc.exerciseButtons && listMode && A.entries.length > 0 && <div className="muted small" style={{ marginBottom: 6 }}>{t('Move, swap and remove below act on the exercise marked {0}.', t('Current'))}</div>}
-    <Button onClick={() => exercisePicker((ex, quick) => {
-      // A freehand add inherits the current unit's routine (its `rid`) so it lands in that
-      // routine's block in a combined session and gets a real prescription; a routine-less
-      // freestyle session has no `rid` to inherit. `noProg` is never set independently here —
-      // the only mid-session route to an excluded entry is "Add routine".
-      const curRid = A.entries[A.cur]?.rid
-      const routine = curRid ? S.routines.find(r => r.id === curRid) : null
-      const freestyle = !routine
-      // Freestyle has no routine prescription to apply: show the last target in the config
-      // sheet and carry its completed rows forward. A planned session uses its configured
-      // target when progression is off, while progression-enabled sessions keep their path.
-      const seed = freestyle ? freestyleConfig(S, { id: ex.id, ...defaultConfig(ex.id) }) : null
-      const commit = cfg => update(s => {
-        const full = { ...cfg, id: ex.id }
-        const plan = freestyle ? null : nextPrescription(s, full, routine)
-        const sets = buildSets(s, full, {
-          step: modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit),
-          ...(freestyle ? { preferLast: true } : {}),
-          ...(plan?.kind === 'off' ? { useTarget: true } : {})
-        })
-        const progressed = freestyle ? sets : applyPrescription(sets, plan, modeOf(full) === 'reps' ? weightIncrement(full, s.unit) : defaultIncrement(ex.id, s.unit))
-        const insertAt = insertionIndexAfterCurrentUnit(supersetUnits(s.active.entries), s.active.cur, s.active.entries.length)
-        s.active.entries.splice(insertAt, 0, { id: ex.id, target: { ...cfg }, plan, sets: applyIntensifierPlan(progressed, full), ...(curRid ? { rid: curRid } : {}) })
-        s.active.cur = insertAt
-        useUI.getState().shiftRestOwner(insertAt, 1)
-      })
-      // The "+" on a picker row reads as "add this now" — routed through the same detail
-      // sheet before, so it added nothing until you'd scrolled past it and found the real
-      // button. Quick-add commits with the same default (or, freestyle, last-session) config
-      // the sheet would have opened with; tapping the row still opens that sheet for anyone
-      // who wants to set sets/reps first.
-      if (quick) { commit(seed || defaultConfig(ex.id)); useUI.getState().toast(t('“{0}” added to {1}', capWords(exerciseNameFor(ex)), routine ? routine.name : t('Freestyle'))) }
-      else exConfigSheet(ex, null, commit, null, routine, seed)
-    })} icon="plus">{t('Add exercise')}</Button>
+    <div className="row">
+      <Button onClick={() => addExercise(false)} icon="plus">{t('Add exercise')}</Button>
+      {/* "Add as superset" wraps at phone width; the link icon and the picker's title say the rest */}
+      {A.entries.length > 0 && <Button onClick={() => addExercise(true)} icon="link" aria-label={t('Add as superset')} title={t('Add as superset')}>{t('Superset')}</Button>}
+    </div>
     {wc.exerciseButtons && A.entries.length > 0 && <>
       <div style={{ height: 6 }} />
       <div className="row">

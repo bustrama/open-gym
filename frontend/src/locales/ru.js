@@ -1250,4 +1250,9 @@ export default {
   'already added': 'уже добавлено',
   'no exercises': 'нет упражнений',
   'Pick equipment': 'Выбрать оборудование',
+  'Do later': 'Сделать позже',
+  '“{0}” saved for later': '«{0}» — на потом',
+  'Tap an exercise to go to it.': 'Нажмите на упражнение, чтобы перейти к нему.',
+  'Up next: {0}': 'Далее: {0}',
+  'Add as superset': 'Добавить как суперсет',
 }

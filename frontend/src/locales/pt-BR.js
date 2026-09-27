@@ -672,6 +672,11 @@ export const PT_BR_OVERRIDES = {
   'Download & Install': 'Baixar e instalar',
   'Starting download…': 'Iniciando download…',
   'Downloading update…': 'Baixando atualização…',
+  'Do later': 'Fazer depois',
+  '“{0}” saved for later': '“{0}” ficou para depois',
+  'Tap an exercise to go to it.': 'Toque em um exercício para ir até ele.',
+  'Up next: {0}': 'A seguir: {0}',
+  'Add as superset': 'Adicionar como superset',
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

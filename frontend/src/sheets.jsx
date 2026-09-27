@@ -912,7 +912,7 @@ function usageMap(st) {
   st.workouts.forEach(w => w.entries.forEach(e => { u[e.id] = (u[e.id] || 0) + 1 }))
   return u
 }
-function ExercisePicker({ onPick, close }) {
+function ExercisePicker({ onPick, close, title }) {
   const st = useStore(s => s.S)
   const usage = usageMap(st)
   const [q, setQ] = useState('')
@@ -941,14 +941,14 @@ function ExercisePicker({ onPick, close }) {
   useRevealActiveChip(bpStrip, bp)
   useRevealActiveChip(eqStrip, eqOn)
   if (byMuscle) return <>
-    <div className="row between" style={{ marginBottom: 10 }}><h3>{t('Add exercise')}</h3>
+    <div className="row between" style={{ marginBottom: 10 }}><h3>{title || t('Add exercise')}</h3>
       <Button size="sm" variant="ghost" onClick={() => setByMuscle(false)}>{t('All')}</Button>
     </div>
     <MuscleExplorer onPick={onPick} />
   </>
 
   return <>
-    <div className="row between" style={{ marginBottom: 10 }}><h3>{t('Add exercise')}</h3>
+    <div className="row between" style={{ marginBottom: 10 }}><h3>{title || t('Add exercise')}</h3>
       <Button size="sm" variant="tinted" icon="target" onClick={() => setByMuscle(true)}>{t('By muscle')}</Button>
     </div>
     {/* .picker-search is what index.css keys the keyboard-aware sheet layout on: the sheet
@@ -999,7 +999,7 @@ function ExercisePicker({ onPick, close }) {
     {f.length > shown && <><div style={{ height: 8 }} /><Button onClick={() => setShown(s => s + 50)}>{t('Show more')}</Button></>}
   </>
 }
-export const exercisePicker = onPick => ui().openSheet(close => <ExercisePicker onPick={onPick} close={close} />)
+export const exercisePicker = (onPick, title) => ui().openSheet(close => <ExercisePicker onPick={onPick} close={close} title={title} />)
 
 /** Start a safe swap for one exact active-workout occurrence. */
 export function swapActiveWorkoutExercise(index) {

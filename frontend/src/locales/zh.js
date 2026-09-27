@@ -1250,4 +1250,9 @@ export default {
   'already added': '已添加',
   'no exercises': '没有动作',
   'Pick equipment': '选择器械',
+  'Do later': '稍后再做',
+  '“{0}” saved for later': '“{0}”已移到后面',
+  'Tap an exercise to go to it.': '点按一个动作即可跳转到它。',
+  'Up next: {0}': '下一个：{0}',
+  'Add as superset': '添加为超级组',
 }

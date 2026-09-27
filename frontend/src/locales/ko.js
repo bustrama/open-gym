@@ -1250,4 +1250,9 @@ export default {
   'already added': '이미 추가됨',
   'no exercises': '운동 없음',
   'Pick equipment': '기구 선택',
+  'Do later': '나중에 하기',
+  '“{0}” saved for later': '“{0}” 나중으로 미뤘어요',
+  'Tap an exercise to go to it.': '운동을 탭하면 그 운동으로 이동해요.',
+  'Up next: {0}': '다음: {0}',
+  'Add as superset': '슈퍼세트로 추가',
 }

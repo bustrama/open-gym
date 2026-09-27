@@ -1250,4 +1250,9 @@ export default {
   'already added': 'zaten ekli',
   'no exercises': 'egzersiz yok',
   'Pick equipment': 'Ekipman seç',
+  'Do later': 'Sonra yap',
+  '“{0}” saved for later': '“{0}” sonraya bırakıldı',
+  'Tap an exercise to go to it.': 'Gitmek için bir egzersize dokun.',
+  'Up next: {0}': 'Sıradaki: {0}',
+  'Add as superset': 'Süperset olarak ekle',
 }

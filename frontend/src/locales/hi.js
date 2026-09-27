@@ -1250,4 +1250,9 @@ export default {
   'already added': 'पहले से जोड़ा हुआ',
   'no exercises': 'कोई व्यायाम नहीं',
   'Pick equipment': 'उपकरण चुनें',
+  'Do later': 'बाद में करें',
+  '“{0}” saved for later': '“{0}” बाद के लिए रखा गया',
+  'Tap an exercise to go to it.': 'किसी व्यायाम पर जाने के लिए उसे टैप करें।',
+  'Up next: {0}': 'अगला: {0}',
+  'Add as superset': 'सुपरसेट के रूप में जोड़ें',
 }
