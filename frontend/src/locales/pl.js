@@ -1251,6 +1251,7 @@ export default {
   'no exercises': 'brak ćwiczeń',
   'Pick equipment': 'Wybierz sprzęt',
   'Do later': 'Zrób później',
+  'Round {0}': 'Runda {0}',
   '“{0}” saved for later': '„{0}” przełożone na później',
   'Tap an exercise to go to it.': 'Stuknij ćwiczenie, aby do niego przejść.',
   'Up next: {0}': 'Następne: {0}',

@@ -1251,6 +1251,7 @@ export default {
   'no exercises': 'sem exercícios',
   'Pick equipment': 'Escolher equipamento',
   'Do later': 'Fazer mais tarde',
+  'Round {0}': 'Ronda {0}',
   '“{0}” saved for later': '“{0}” fica para mais tarde',
   'Tap an exercise to go to it.': 'Toca num exercício para ir até ele.',
   'Up next: {0}': 'A seguir: {0}',

@@ -673,6 +673,7 @@ export const PT_BR_OVERRIDES = {
   'Starting download…': 'Iniciando download…',
   'Downloading update…': 'Baixando atualização…',
   'Do later': 'Fazer depois',
+  'Round {0}': 'Rodada {0}',
   '“{0}” saved for later': '“{0}” ficou para depois',
   'Tap an exercise to go to it.': 'Toque em um exercício para ir até ele.',
   'Up next: {0}': 'A seguir: {0}',

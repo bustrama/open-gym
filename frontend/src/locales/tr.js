@@ -1251,6 +1251,7 @@ export default {
   'no exercises': 'egzersiz yok',
   'Pick equipment': 'Ekipman seç',
   'Do later': 'Sonra yap',
+  'Round {0}': 'Tur {0}',
   '“{0}” saved for later': '“{0}” sonraya bırakıldı',
   'Tap an exercise to go to it.': 'Gitmek için bir egzersize dokun.',
   'Up next: {0}': 'Sıradaki: {0}',

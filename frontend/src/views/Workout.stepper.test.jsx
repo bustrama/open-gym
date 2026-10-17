@@ -126,8 +126,9 @@ async function unmount() {
 // given set row inside a given exercise block (addressed by its data-exidx wrapper).
 function stepperButton(exidx, setRow, col, direction) {
   const block = container.querySelector(`[data-exidx="${exidx}"]`)
+  const rows = container.querySelectorAll(`[data-exidx="${exidx}"] .setrow`)
   expect(block).toBeTruthy()
-  const row = block.querySelectorAll('.setrow')[setRow]
+  const row = rows[setRow]
   expect(row).toBeTruthy()
   const cell = row.querySelectorAll('.stp')[col]
   expect(cell).toBeTruthy()

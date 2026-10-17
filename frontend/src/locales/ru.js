@@ -1251,6 +1251,7 @@ export default {
   'no exercises': 'нет упражнений',
   'Pick equipment': 'Выбрать оборудование',
   'Do later': 'Сделать позже',
+  'Round {0}': 'Раунд {0}',
   '“{0}” saved for later': '«{0}» — на потом',
   'Tap an exercise to go to it.': 'Нажмите на упражнение, чтобы перейти к нему.',
   'Up next: {0}': 'Далее: {0}',

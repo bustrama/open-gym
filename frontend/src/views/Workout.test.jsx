@@ -654,7 +654,7 @@ describe('Un-ticking a set and its rest', () => {
     ])
     await toggleSet(0)
     await rerender()
-    await toggleSet(2)
+    await toggleSet(1)
     expect(mocks.startRest).toHaveBeenLastCalledWith(90, 1, 0)
 
     mocks.timer = running(1, 0)
@@ -992,7 +992,7 @@ describe('superset flow survives an exercise being removed mid-session', () => {
     expect(mocks.S.active.cur).toBe(1)
 
     // Partner closes the round (each still has a second set), which is what starts the rest.
-    await toggleSet(2)
+    await toggleSet(1)
     expect(mocks.startRest).toHaveBeenCalledWith(90, expect.any(Number), expect.any(Number))
   })
 })
@@ -1007,7 +1007,7 @@ describe('superset actionable-set centring', () => {
 
     await rerenderAt(1)
 
-    const rows = container.querySelector('[data-exidx="1"]').querySelectorAll('.setrow')
+    const rows = container.querySelectorAll('[data-exidx="1"] .setrow')
     expect(mocks.scrollCalls).toEqual([
       { node: rows[1], options: { behavior: 'smooth', block: 'center' } },
     ])
@@ -1022,7 +1022,7 @@ describe('superset actionable-set centring', () => {
 
     await rerenderAt(1)
 
-    const rows = container.querySelector('[data-exidx="1"]').querySelectorAll('.setrow')
+    const rows = container.querySelectorAll('[data-exidx="1"] .setrow')
     expect(mocks.scrollCalls).toEqual([
       { node: rows[1], options: { behavior: 'smooth', block: 'center' } },
     ])
@@ -1242,6 +1242,24 @@ describe('workout list view', () => {
     expect(units().map(u => u.querySelector('.wl-hd .muted')?.textContent)).toEqual([
       'Superset 1 / 2', 'Exercise 2 / 2',
     ])
+  })
+
+  it('lays a superset out by round: each round holds one set of every member, each ticked on its own', async () => {
+    await mount([
+      exercise('bench', [true, false], { sg: 'g1', asked: true }),
+      exercise('row', [true, false, false], { sg: 'g1', asked: true }),
+    ], 0, { workoutView: 'list' })
+
+    const rounds = [...container.querySelectorAll('.ss-round')]
+    expect(rounds.length).toBe(3)
+    // round 1 is finished, round 2 is the one in progress, round 3 only has the longer member
+    expect(rounds.map(r => r.classList.contains('done'))).toEqual([true, false, false])
+    expect(rounds.map(r => r.classList.contains('cur'))).toEqual([false, true, false])
+    expect(rounds.map(r => r.querySelectorAll('.setrow').length)).toEqual([2, 2, 1])
+    expect(rounds[1].querySelectorAll('.ss-set')[0].getAttribute('data-exidx')).toBe('0')
+    expect(rounds[1].querySelectorAll('.ss-set')[1].getAttribute('data-exidx')).toBe('1')
+    // every set keeps its own tick: 2 + 3 sets, 5 checkboxes
+    expect(container.querySelectorAll('.ss-round [role="checkbox"]').length).toBe(5)
   })
 
   it('defaults to cards when the setting is absent (pre-existing profiles)', async () => {

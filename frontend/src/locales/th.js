@@ -1262,6 +1262,7 @@ export default {
   'no exercises': 'ไม่มีท่าออกกำลังกาย',
   'Pick equipment': 'เลือกอุปกรณ์',
   'Do later': 'ทำทีหลัง',
+  'Round {0}': 'รอบที่ {0}',
   '“{0}” saved for later': 'เลื่อน “{0}” ไปทำทีหลัง',
   'Tap an exercise to go to it.': 'แตะท่าออกกำลังกายเพื่อไปที่ท่านั้น',
   'Up next: {0}': 'ถัดไป: {0}',

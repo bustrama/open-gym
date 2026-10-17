@@ -1251,6 +1251,7 @@ export default {
   'no exercises': 'कोई व्यायाम नहीं',
   'Pick equipment': 'उपकरण चुनें',
   'Do later': 'बाद में करें',
+  'Round {0}': 'राउंड {0}',
   '“{0}” saved for later': '“{0}” बाद के लिए रखा गया',
   'Tap an exercise to go to it.': 'किसी व्यायाम पर जाने के लिए उसे टैप करें।',
   'Up next: {0}': 'अगला: {0}',

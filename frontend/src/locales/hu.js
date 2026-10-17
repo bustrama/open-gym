@@ -1254,6 +1254,7 @@ export default {
   'no exercises': 'nincs gyakorlat',
   'Pick equipment': 'Eszköz kiválasztása',
   'Do later': 'Később',
+  'Round {0}': '{0}. kör',
   '“{0}” saved for later': '„{0}” későbbre téve',
   'Tap an exercise to go to it.': 'Koppints egy gyakorlatra, hogy odaugorj.',
   'Up next: {0}': 'Következik: {0}',
