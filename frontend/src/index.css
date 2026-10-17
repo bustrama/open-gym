@@ -1388,6 +1388,10 @@ body.chips-dragging *{cursor:inherit}
 .ovw-open{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:99px;background:var(--surface-2)}
 .ovw-open .icn{font-size:11px;--icon-stroke:2.4}
 .ovw-row{min-height:56px}
+/* the exercise's picture, small, between the status number and the name; a superset stacks its members' */
+.ovw-thumbs{display:flex;flex-direction:column;gap:3px;flex:none}
+.ovw-thumbs .thumb{width:40px;height:40px;border-radius:8px}
+.ovw-thumbs .thumb:only-child{width:48px;height:48px}
 .ovw-row.cur{box-shadow:inset 0 0 0 1.5px var(--acc-line)}
 .ovw-row.done .tt{color:var(--label-2)}
 .ovw-n{

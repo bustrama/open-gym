@@ -88,7 +88,7 @@ vi.mock('../sheets.jsx', () => ({
   exerciseHistorySheet: mocks.exerciseHistorySheet,
   addRoutineToSessionSheet: vi.fn(),
 }))
-vi.mock('../components/Media.jsx', () => ({ default: () => null }))
+vi.mock('../components/Media.jsx', () => ({ default: () => null, Thumb: () => null }))
 // api.js reads navigator.userAgent at module scope. This file installs its own DOM inside the
 // tests rather than declaring a vitest environment, so it must not depend on an ambient one.
 vi.mock('../lib/api.js', () => ({

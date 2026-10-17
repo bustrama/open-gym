@@ -11,7 +11,7 @@ import { beep, vibrate, unlock } from '../lib/sound.js'
 import { t, exerciseNameFor } from '../lib/i18n.js'
 import { api, appBase } from '../lib/api.js'
 import { insertionIndexAfterCurrentUnit, nextUnfinishedUnit, setProgressHighWater, supersetFlowStep, restAfterSet, restOnRecheck, restSecFor, untickEndsRest, warmupRestSecFor } from '../lib/supersetFlow.js'
-import Media from '../components/Media.jsx'
+import Media, { Thumb } from '../components/Media.jsx'
 import { startFlow, exercisePicker, exConfigSheet, exerciseDetailSheet, finishWorkout, workoutCompleteSheet, confirmSheet, exerciseNoteSheet, sessionNoteSheet, renameWorkoutSheet, swapActiveWorkoutExercise, barWeightSheet, menuSheet, effortPickerSheet, exerciseHistorySheet, addRoutineToSessionSheet } from '../sheets.jsx'
 import { effortColor } from '../lib/effort.js'
 import Icon from '../components/Icon.jsx'
@@ -535,6 +535,7 @@ function ExercisesOverview({ close, onJump, onLater }) {
           className={'item ovw-row ' + row.status + (row.current ? ' cur' : '')} data-exidx={first}
           onClick={() => { close(); onJump(first) }}>
           <span className="ovw-n">{row.status === 'done' ? <Icon name="check" /> : n + 1}</span>
+          <div className="ovw-thumbs">{row.members.map((m, k) => <Thumb key={k} ex={exOr(m.id)} />)}</div>
           <div className="grow">
             <div className="tt capitalize">{row.members.map(m => exerciseNameFor(exOr(m.id))).join(' + ')}</div>
             <div className="ss">{t('{0} sets', row.done + '/' + row.total)}{row.current && <span className="tag acc" style={{ marginLeft: 8 }}>{t('Current')}</span>}</div>
